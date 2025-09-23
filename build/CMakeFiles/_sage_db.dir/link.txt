@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -fno-lto -flto -shared  -o _sage_db.cpython-311-x86_64-linux-gnu.so CMakeFiles/_sage_db.dir/python/bindings.cpp.o  -Wl,-rpath,/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/build: libsage_db.so /usr/lib/gcc/x86_64-linux-gnu/13/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

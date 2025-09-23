@@ -1,0 +1,7 @@
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/lib/libsage_db.so
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/include/sage_db/sage_db.h
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/include/sage_db/vector_store.h
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/include/sage_db/common.h
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/include/sage_db/query_engine.h
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/include/sage_db/metadata_store.h
+/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/install/./_sage_db.cpython-311-x86_64-linux-gnu.so
