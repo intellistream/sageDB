@@ -25,17 +25,39 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --install-deps)
-            echo "Installing dependencies..."
-            # Install FAISS and other dependencies
-            if command -v conda &> /dev/null; then
-                echo "Installing FAISS via conda..."
-                conda install -c conda-forge faiss-cpu pybind11 -y
-            elif command -v pip &> /dev/null; then
-                echo "Installing FAISS via pip..."
-                pip install faiss-cpu pybind11[global]
-            else
-                echo "Warning: Neither conda nor pip found. Please install FAISS manually."
+            echo "Installing dependencies (prefer pip, fallback to conda)..."
+            # Avoid failing the entire build if dependency install has conflicts (e.g., conda solver pins)
+            set +e
+            INSTALLED=false
+            if command -v pip &> /dev/null; then
+                echo "📦 Trying: pip install faiss-cpu pybind11[global]"
+                pip install --upgrade pip >/dev/null 2>&1
+                if pip install "faiss-cpu>=1.7.3" "pybind11[global]"; then
+                    INSTALLED=true
+                    echo "✅ Dependencies installed via pip"
+                else
+                    echo "⚠️  pip installation failed, will try conda if available"
+                fi
             fi
+
+            if [ "$INSTALLED" != true ] && command -v conda &> /dev/null; then
+                echo "📦 Trying: conda install -c conda-forge faiss-cpu pybind11"
+                # Use conda-forge explicitly and allow failures (avoid libmamba pin issues on CI)
+                if conda install -c conda-forge faiss-cpu pybind11 -y; then
+                    INSTALLED=true
+                    echo "✅ Dependencies installed via conda"
+                else
+                    echo "⚠️  conda installation failed; continuing without FAISS (fallback build)"
+                fi
+            fi
+
+            if [ "$INSTALLED" != true ]; then
+                echo "ℹ️ Proceeding without FAISS; the build will use a fallback implementation."
+                echo "   For optimal performance, install FAISS manually later:"
+                echo "   - pip install faiss-cpu"
+                echo "   - or: conda install -c conda-forge faiss-cpu"
+            fi
+            set -e
             shift
             ;;
         --help)
