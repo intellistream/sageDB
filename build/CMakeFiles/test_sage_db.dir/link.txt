@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/test_sage_db.dir/tests/test_sage_db.cpp.o -o test_sage_db  -Wl,-rpath,/home/shuhao/SAGE/packages/sage-middleware/src/sage/middleware/components/sage_db/build libsage_db.so /usr/lib/gcc/x86_64-linux-gnu/13/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a 

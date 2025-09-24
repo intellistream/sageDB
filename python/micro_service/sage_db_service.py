@@ -6,11 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from ..sage_db import (
-    DatabaseConfig,
-    IndexType,
-    SageDB,
-)
+from ..sage_db import DatabaseConfig, IndexType, SageDB
 
 
 @dataclass
@@ -39,7 +35,11 @@ class SageDBService:
         self._db = SageDB.from_config(cfg)
         self._dim = dimension
 
-    def add(self, vector: np.ndarray | List[float], metadata: Optional[Dict[str, str]] = None) -> int:
+    def add(
+        self,
+        vector: np.ndarray | List[float],
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> int:
         if not isinstance(vector, np.ndarray):
             vector = np.asarray(vector, dtype=np.float32)
         if vector.ndim != 1 or vector.shape[0] != self._dim:
@@ -59,7 +59,9 @@ class SageDBService:
             raise ValueError(f"vectors shape must be (N, {self._dim})")
         return self._db.add_batch(arr, metadata_list or [])
 
-    def search(self, query: np.ndarray | List[float], k: int = 5, include_metadata: bool = True) -> List[Dict[str, Any]]:
+    def search(
+        self, query: np.ndarray | List[float], k: int = 5, include_metadata: bool = True
+    ) -> List[Dict[str, Any]]:
         if not isinstance(query, np.ndarray):
             query = np.asarray(query, dtype=np.float32)
         results = self._db.search(query, k=k, include_metadata=include_metadata)

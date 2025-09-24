@@ -19,9 +19,9 @@ except ImportError:  # pragma: no cover - repo/local build fallback
 
     here = Path(__file__).resolve().parent
     candidates = [
-        here / "build" / "lib",            # python dir local build
-        here.parent / "build" / "lib",     # component-level build
-        here.parent,                         # compiled module copied next to python/
+        here / "build" / "lib",  # python dir local build
+        here.parent / "build" / "lib",  # component-level build
+        here.parent,  # compiled module copied next to python/
     ]
     for p in candidates:
         if p.exists() and str(p) not in sys.path:
