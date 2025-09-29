@@ -1,5 +1,7 @@
 python/__pycache__/__init__.cpython-311.pyc
 python/__pycache__/sage_db.cpython-311.pyc
+install/*
+install/lib/*
 install/_sage_db.cpython-311-x86_64-linux-gnu.so
 install/lib/libsage_db.so
 build/*
@@ -10,3 +12,4 @@ python/_sage_db.cpython-311-x86_64-linux-gnu.so
 *.o
 *.so
 *.a
+
