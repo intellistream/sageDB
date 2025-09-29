@@ -14,7 +14,9 @@ try:
     from . import _sage_db  # type: ignore
 except ImportError:  # pragma: no cover - repo/local build fallback
     import importlib
+    import os
     import sys
+    import ctypes
     from pathlib import Path
 
     here = Path(__file__).resolve().parent
@@ -26,6 +28,14 @@ except ImportError:  # pragma: no cover - repo/local build fallback
         here.parent / "build",  # build directory
         here.parent / "install",  # install directory
     ]
+
+    # Allow explicit override so CI can point to installed location
+    extra_paths = os.environ.get("SAGE_DB_LIBRARY_PATH")
+    if extra_paths:
+        for token in extra_paths.split(os.pathsep):
+            token_path = Path(token.strip())
+            if token_path and token_path.exists():
+                candidates.append(token_path)
 
     # Add paths and try direct import
     for p in candidates:
@@ -42,6 +52,44 @@ except ImportError:  # pragma: no cover - repo/local build fallback
                 # Add this directory to sys.path if not already there
                 if str(p) not in sys.path:
                     sys.path.insert(0, str(p))
+                break
+
+    # Ensure the native lib dependency is preloaded so dlopen can succeed
+    lib_loaded = False
+    lib_names = [
+        "libsage_db.so",  # Linux
+        "libsage_db.dylib",  # macOS
+        "sage_db.dll",  # Windows
+    ]
+
+    for p in candidates:
+        if not p.exists():
+            continue
+        for lib_name in lib_names:
+            lib_path = p / lib_name
+            if lib_path.exists():
+                try:
+                    ctypes.CDLL(str(lib_path))
+                    lib_loaded = True
+                    break
+                except OSError:
+                    continue
+        if lib_loaded:
+            break
+
+    if not lib_loaded:
+        # Some build layouts place the shared library one level deeper (e.g. install/lib)
+        for p in candidates:
+            if not p.exists():
+                continue
+            for child in p.rglob("libsage_db*.so"):
+                try:
+                    ctypes.CDLL(str(child))
+                    lib_loaded = True
+                    break
+                except OSError:
+                    continue
+            if lib_loaded:
                 break
 
     if _sage_db is None:
