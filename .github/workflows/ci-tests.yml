@@ -1,0 +1,133 @@
+name: CMake - Build and Test SAGE DB
+
+on:
+  pull_request:
+    branches: [ main, main-dev ]
+  push:
+    branches: [ main, main-dev ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} | CMake ${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+    env:
+      # Limit CI log level to avoid excessive DEBUG logs
+      SAGE_DB_LOG_LEVEL: info
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ]
+        build_type: [ Release, Debug ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup conda environment for FAISS and other dependencies
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: 3.11
+          channels: conda-forge
+
+      - name: Install dependencies via conda
+        shell: bash -el {0}
+        run: |
+          conda install -y \
+            faiss-cpu \
+            openblas \
+            cmake \
+            make \
+            gcc_linux-64 \
+            gxx_linux-64 \
+            pkg-config
+
+      # Install additional C++ toolchain (Ubuntu)
+      - name: Install C++ toolchain (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            pkg-config \
+            libblas-dev \
+            liblapack-dev
+
+      - name: Show compiler and dependency versions
+        shell: bash -el {0}
+        run: |
+          g++ --version || true
+          gcc --version || true
+          cmake --version || true
+          conda list | grep faiss || true
+          conda list | grep openblas || true
+
+      - name: Configure CMake
+        shell: bash -el {0}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DBUILD_TESTS=ON \
+            -DBUILD_PYTHON_BINDINGS=OFF \
+            -DENABLE_MULTIMODAL=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+            -DFAISS_ROOT="$CONDA_PREFIX"
+
+      - name: Build
+        shell: bash -el {0}
+        run: |
+          cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Set library path for tests
+        shell: bash -el {0}
+        run: |
+          echo "LD_LIBRARY_PATH=$PWD/build:$CONDA_PREFIX/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+      - name: Run unit tests
+        shell: bash -el {0}
+        run: |
+          cd build
+          ctest --output-on-failure --verbose
+
+      - name: Run direct test executables (fallback)
+        if: failure()
+        shell: bash -el {0}
+        run: |
+          echo "Running tests directly..."
+          cd build
+          if [ -f ./test_sage_db ]; then
+            echo "Running test_sage_db..."
+            LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ./test_sage_db || true
+          fi
+          if [ -f ./test_multimodal ]; then
+            echo "Running test_multimodal..."
+            LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ./test_multimodal || true
+          fi
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-db-test-logs-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/Testing/**
+            build/*.log
+            build/**/compile_commands.json
+            build/test_sage_db
+            build/test_multimodal
+
+      - name: Upload built library
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-db-library-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/libsage_db.so
+            build/_sage_db*.so

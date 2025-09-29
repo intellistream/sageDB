@@ -1,0 +1,80 @@
+name: Quick Test
+
+on:
+  pull_request:
+    branches: [ main, main-dev ]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'tests/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-test:
+    name: Quick Test (Ubuntu Release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Use cache for conda dependencies
+      - name: Cache conda dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/conda_pkgs_dir
+          key: ${{ runner.os }}-conda-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-conda-
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: 3.11
+          channels: conda-forge
+          use-only-tar-bz2: true
+
+      - name: Install dependencies
+        shell: bash -el {0}
+        run: |
+          conda install -y \
+            faiss-cpu \
+            openblas \
+            cmake \
+            make \
+            gcc_linux-64 \
+            gxx_linux-64
+
+      - name: Configure and Build
+        shell: bash -el {0}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTS=ON \
+            -DBUILD_PYTHON_BINDINGS=OFF \
+            -DENABLE_MULTIMODAL=ON \
+            -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
+            -DFAISS_ROOT="$CONDA_PREFIX"
+          
+          cmake --build build --parallel
+
+      - name: Run Tests
+        shell: bash -el {0}
+        run: |
+          cd build
+          LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ctest --output-on-failure
+
+      - name: Test library loading
+        shell: bash -el {0}
+        run: |
+          echo "Testing library dependencies..."
+          cd build
+          ldd libsage_db.so || true
+          LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ldd test_sage_db || true

@@ -204,7 +204,7 @@ if(BUILD_PYTHON_BINDINGS)
         PREFIX ""
         # 设置RPATH以便Python模块能找到共享库
         BUILD_RPATH "${CMAKE_CURRENT_BINARY_DIR};${CMAKE_INSTALL_PREFIX}/lib"
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../install/lib;$ORIGIN/../../install/lib"
+        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../build;$ORIGIN/../install/lib;$ORIGIN/../../install/lib"
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
     

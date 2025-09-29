@@ -163,6 +163,13 @@ public:
                 id_file.write(reinterpret_cast<const char*>(pair.second.data()), 
                              vec_size * sizeof(float));
             }
+            
+            // Save faiss_to_custom_id mapping
+            size_t mapping_size = faiss_to_custom_id_.size();
+            id_file.write(reinterpret_cast<const char*>(&mapping_size), sizeof(mapping_size));
+            for (VectorId id : faiss_to_custom_id_) {
+                id_file.write(reinterpret_cast<const char*>(&id), sizeof(id));
+            }
         }
 #else
         // Fallback save implementation
@@ -188,6 +195,8 @@ public:
         std::ifstream id_file(filepath + ".ids", std::ios::binary);
         if (id_file.is_open()) {
             id_to_vector_.clear();
+            faiss_to_custom_id_.clear();
+            
             size_t map_size;
             id_file.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
             
@@ -200,6 +209,16 @@ public:
                 id_file.read(reinterpret_cast<char*>(vec.data()), vec_size * sizeof(float));
                 id_to_vector_[id] = vec;
                 next_id_ = std::max(next_id_.load(), id + 1);
+            }
+            
+            // Load faiss_to_custom_id mapping
+            size_t mapping_size;
+            id_file.read(reinterpret_cast<char*>(&mapping_size), sizeof(mapping_size));
+            faiss_to_custom_id_.reserve(mapping_size);
+            for (size_t i = 0; i < mapping_size; ++i) {
+                VectorId id;
+                id_file.read(reinterpret_cast<char*>(&id), sizeof(id));
+                faiss_to_custom_id_.push_back(id);
             }
         }
 #else
