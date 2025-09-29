@@ -7,8 +7,8 @@ echo "Building SAGE DB - Vector Database Module..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Configuration
-BUILD_TYPE="Release"
+# Configuration (default to Debug for easier debugging; allow override via BUILD_TYPE env or flags)
+BUILD_TYPE="${BUILD_TYPE:-Debug}"
 BUILD_DIR="build"
 INSTALL_PREFIX="$SCRIPT_DIR/install"
 
@@ -189,7 +189,7 @@ mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
 # Configure with CMake
-echo "Configuring build..."
+echo "Configuring build (CMAKE_BUILD_TYPE=${BUILD_TYPE})..."
 CMAKE_ARGS=(
     "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
     "-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX"
@@ -197,6 +197,19 @@ CMAKE_ARGS=(
     "-DBUILD_PYTHON_BINDINGS=ON"
     "-DUSE_OPENMP=ON"
 )
+
+if [[ -n "${SAGE_COMMON_DEPS_FILE:-}" ]]; then
+    CMAKE_ARGS+=("-DSAGE_COMMON_DEPS_FILE=${SAGE_COMMON_DEPS_FILE}")
+fi
+if [[ -n "${SAGE_ENABLE_GPERFTOOLS:-}" ]]; then
+    CMAKE_ARGS+=("-DSAGE_ENABLE_GPERFTOOLS=${SAGE_ENABLE_GPERFTOOLS}")
+fi
+if [[ -n "${SAGE_PYBIND11_VERSION:-}" ]]; then
+    CMAKE_ARGS+=("-DSAGE_PYBIND11_VERSION=${SAGE_PYBIND11_VERSION}")
+fi
+if [[ -n "${SAGE_GPERFTOOLS_ROOT:-}" ]]; then
+    CMAKE_ARGS+=("-DSAGE_GPERFTOOLS_ROOT=${SAGE_GPERFTOOLS_ROOT}")
+fi
 
 # Add conda prefix if available
 if [[ -n "$CONDA_PREFIX" ]]; then
