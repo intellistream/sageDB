@@ -1,13 +1,22 @@
 cmake_minimum_required(VERSION 3.12)
 project(sage_db VERSION 1.0.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build options
 option(BUILD_TESTS "Build test programs" ON)
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 option(USE_OPENMP "Enable OpenMP support" ON)
+
+set(_sage_db_enable_gperftools_default OFF)
+if(DEFINED SAGE_ENABLE_GPERFTOOLS)
+    set(_sage_db_enable_gperftools_default ${SAGE_ENABLE_GPERFTOOLS})
+endif()
+option(ENABLE_GPERFTOOLS "Enable gperftools profiling support" ${_sage_db_enable_gperftools_default})
+if(DEFINED SAGE_ENABLE_GPERFTOOLS)
+    set(ENABLE_GPERFTOOLS ${SAGE_ENABLE_GPERFTOOLS} CACHE BOOL "Enable gperftools profiling support" FORCE)
+endif()
 
 # Find packages (keep minimal to improve portability)
 
@@ -101,20 +110,50 @@ target_compile_options(sage_db PRIVATE
 # Python bindings
 if(BUILD_PYTHON_BINDINGS)
     find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-    
-    # Always download a newer pybind11 version that supports Python 3.11
-    message(STATUS "Downloading pybind11 for Python 3.11 compatibility...")
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11
-        GIT_TAG v2.13.0
-    )
-    FetchContent_MakeAvailable(pybind11)
-    
+
+    set(_sage_db_deps_included FALSE)
+    if(DEFINED SAGE_COMMON_DEPS_FILE AND EXISTS "${SAGE_COMMON_DEPS_FILE}")
+        include("${SAGE_COMMON_DEPS_FILE}")
+        set(_sage_db_deps_included TRUE)
+    endif()
+
+    if(NOT _sage_db_deps_included)
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pybind11_dependency.cmake)
+    endif()
+
+    if(ENABLE_GPERFTOOLS AND NOT (DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS))
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gperftools.cmake)
+    endif()
+
     pybind11_add_module(_sage_db python/bindings.cpp)
     target_link_libraries(_sage_db PRIVATE sage_db)
     target_compile_definitions(_sage_db PRIVATE VERSION_INFO="${PROJECT_VERSION}")
+
+    if(DEFINED SAGE_COMMON_COMPILE_DEFINITIONS)
+        target_compile_definitions(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_DEFINITIONS})
+    else()
+        target_compile_definitions(_sage_db PRIVATE PYBIND11_INTERNALS_ID="sage_pybind11_shared")
+    endif()
+
+    if(DEFINED SAGE_COMMON_COMPILE_OPTIONS)
+        target_compile_options(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_OPTIONS})
+    else()
+        # Minimize exported symbols (align with _sage_flow) to avoid cross-extension symbol collisions
+        target_compile_options(_sage_db PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
+    endif()
+
+    if(ENABLE_GPERFTOOLS)
+        if(DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS)
+            target_link_libraries(sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
+            target_link_libraries(_sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
+            target_compile_definitions(sage_db PRIVATE ENABLE_GPERFTOOLS)
+            target_compile_definitions(_sage_db PRIVATE ENABLE_GPERFTOOLS)
+        else()
+            message(WARNING "ENABLE_GPERFTOOLS requested but gperftools libraries were not found; disabling support")
+            set(ENABLE_GPERFTOOLS OFF CACHE BOOL "Enable gperftools profiling support" FORCE)
+        endif()
+    endif()
+    set_target_properties(_sage_db PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
     
     # 禁用 LTO 以避免链接器问题，设置输出属性
     set_target_properties(_sage_db PROPERTIES
