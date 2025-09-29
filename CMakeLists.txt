@@ -8,6 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_TESTS "Build test programs" ON)
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 option(USE_OPENMP "Enable OpenMP support" ON)
+option(ENABLE_MULTIMODAL "Enable multimodal fusion support" ON)
+option(ENABLE_OPENCV "Enable OpenCV for image processing" OFF)
+option(ENABLE_FFMPEG "Enable FFmpeg for audio/video processing" OFF)
 
 # Find packages (keep minimal to improve portability)
 
@@ -68,6 +71,21 @@ set(SAGE_DB_HEADERS
     include/sage_db/common.h
 )
 
+# Multimodal fusion sources and headers
+if(ENABLE_MULTIMODAL)
+    list(APPEND SAGE_DB_SOURCES
+        src/multimodal_sage_db.cpp
+        src/fusion_strategies.cpp
+        src/modality_manager.cpp
+    )
+    
+    list(APPEND SAGE_DB_HEADERS
+        include/sage_db/multimodal_fusion.h
+        include/sage_db/multimodal_sage_db.h
+        include/sage_db/fusion_strategies.h
+    )
+endif()
+
 # Create shared library
 add_library(sage_db SHARED ${SAGE_DB_SOURCES})
 
@@ -84,6 +102,30 @@ if(FAISS_FOUND)
         target_link_libraries(sage_db PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
     endif()
     target_compile_definitions(sage_db PRIVATE FAISS_AVAILABLE)
+endif()
+
+# Multimodal fusion dependencies
+if(ENABLE_MULTIMODAL)
+    target_compile_definitions(sage_db PRIVATE MULTIMODAL_ENABLED)
+    
+    # OpenCV for image processing
+    if(ENABLE_OPENCV)
+        find_package(OpenCV REQUIRED)
+        target_include_directories(sage_db PRIVATE ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(sage_db PRIVATE ${OpenCV_LIBS})
+        target_compile_definitions(sage_db PRIVATE OPENCV_ENABLED)
+    endif()
+    
+    # FFmpeg for audio/video processing  
+    if(ENABLE_FFMPEG)
+        find_package(PkgConfig)
+        if(PKG_CONFIG_FOUND)
+            pkg_check_modules(FFMPEG REQUIRED libavformat libavcodec libavutil libswscale)
+            target_include_directories(sage_db PRIVATE ${FFMPEG_INCLUDE_DIRS})
+            target_link_libraries(sage_db PRIVATE ${FFMPEG_LIBRARIES})
+            target_compile_definitions(sage_db PRIVATE FFMPEG_ENABLED)
+        endif()
+    endif()
 endif()
 
 # OpenMP linking
@@ -139,6 +181,15 @@ if(BUILD_TESTS)
     target_include_directories(test_sage_db PRIVATE include)
     
     add_test(NAME test_sage_db COMMAND test_sage_db)
+    
+    # Multimodal tests
+    if(ENABLE_MULTIMODAL)
+        add_executable(test_multimodal tests/test_multimodal.cpp)
+        target_link_libraries(test_multimodal PRIVATE sage_db)
+        target_include_directories(test_multimodal PRIVATE include)
+        
+        add_test(NAME test_multimodal COMMAND test_multimodal)
+    endif()
 endif()
 
 # Install rules
