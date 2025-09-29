@@ -13,10 +13,10 @@ try:
     # Prefer relative import when installed as a package
     from . import _sage_db  # type: ignore
 except ImportError:  # pragma: no cover - repo/local build fallback
+    import ctypes
     import importlib
     import os
     import sys
-    import ctypes
     from pathlib import Path
 
     here = Path(__file__).resolve().parent
