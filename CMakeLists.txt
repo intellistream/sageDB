@@ -202,6 +202,10 @@ if(BUILD_PYTHON_BINDINGS)
         INTERPROCEDURAL_OPTIMIZATION OFF
         OUTPUT_NAME "_sage_db"
         PREFIX ""
+        # 设置RPATH以便Python模块能找到共享库
+        BUILD_RPATH "${CMAKE_CURRENT_BINARY_DIR};${CMAKE_INSTALL_PREFIX}/lib"
+        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../install/lib;$ORIGIN/../../install/lib"
+        INSTALL_RPATH_USE_LINK_PATH TRUE
     )
     
     # 在某些系统上，pybind11 默认启用 LTO，我们需要显式禁用
