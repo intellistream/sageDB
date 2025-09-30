@@ -235,7 +235,23 @@ cmake "${CMAKE_ARGS[@]}" ..
 echo "Building..."
 echo "🔨 开始编译 (使用 $(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4) 个并行任务)..."
 
-if ! make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); then
+# 在CI环境中记录详细的构建输出
+if [[ "${CI:-false}" == "true" ]]; then
+    echo "CI环境: 记录详细构建日志到 make_output.log"
+    if ! make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4) 2>&1 | tee make_output.log; then
+        MAKE_FAILED=true
+    else
+        MAKE_FAILED=false
+    fi
+else
+    if ! make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); then
+        MAKE_FAILED=true
+    else
+        MAKE_FAILED=false
+    fi
+fi
+
+if [[ "$MAKE_FAILED" == "true" ]]; then
     echo "❌ 编译失败，显示详细错误信息："
     echo ""
     echo "=== CMake 配置信息 ==="
