@@ -17,6 +17,9 @@ void test_basic_multimodal() {
     MultimodalConfig multimodal_config;
     multimodal_config.base_config = config;
     multimodal_config.max_modalities_per_item = 3;
+    // 设置fusion参数，确保融合后的向量维度与数据库配置一致
+    multimodal_config.default_fusion_params.target_dimension = config.dimension;
+    multimodal_config.default_fusion_params.strategy = FusionStrategy::CONCATENATION;
     
     MultimodalSageDB db(multimodal_config);
     
@@ -143,6 +146,20 @@ void test_custom_strategy() {
                     }
                 }
             }
+            
+            // 如果指定了目标维度，进行维度调整
+            if (params.target_dimension > 0 && result.size() != params.target_dimension) {
+                Vector aligned_result(params.target_dimension, 0.0f);
+                if (result.size() <= params.target_dimension) {
+                    // 扩展：复制并用零填充
+                    std::copy(result.begin(), result.end(), aligned_result.begin());
+                } else {
+                    // 收缩：截断
+                    std::copy(result.begin(), result.begin() + params.target_dimension, aligned_result.begin());
+                }
+                result = aligned_result;
+            }
+            
             return result;
         }
         
@@ -157,6 +174,8 @@ void test_custom_strategy() {
     
     MultimodalConfig multimodal_config;
     multimodal_config.base_config = config;
+    // 设置target_dimension以确保自定义融合策略输出正确维度
+    multimodal_config.default_fusion_params.target_dimension = config.dimension;
     
     MultimodalSageDB db(multimodal_config);
     
@@ -167,6 +186,7 @@ void test_custom_strategy() {
     // 测试自定义策略
     FusionParams params;
     params.strategy = FusionStrategy::CUSTOM;
+    params.target_dimension = config.dimension;  // 确保设置目标维度
     db.update_fusion_params(params);
     
     Vector text_embedding{1.0f, 2.0f};
