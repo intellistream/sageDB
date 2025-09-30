@@ -151,7 +151,8 @@ target_compile_options(sage_db PRIVATE
 
 # Python bindings
 if(BUILD_PYTHON_BINDINGS)
-    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+    # Use same pattern as sage_flow - let pybind11 handle Python detection
+    # find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 
     set(_sage_db_deps_included FALSE)
     if(DEFINED SAGE_COMMON_DEPS_FILE AND EXISTS "${SAGE_COMMON_DEPS_FILE}")
