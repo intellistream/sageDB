@@ -215,10 +215,19 @@ if [[ -n "${SAGE_GPERFTOOLS_ROOT:-}" ]]; then
     CMAKE_ARGS+=("-DSAGE_GPERFTOOLS_ROOT=${SAGE_GPERFTOOLS_ROOT}")
 fi
 
-# Add conda prefix if available
+# Add conda prefix if available, but avoid Python3_ROOT_DIR conflicts
 if [[ -n "$CONDA_PREFIX" ]]; then
     CMAKE_ARGS+=("-DCMAKE_PREFIX_PATH=$CONDA_PREFIX")
-    CMAKE_ARGS+=("-DPython3_ROOT_DIR=$CONDA_PREFIX")
+    # Don't set Python3_ROOT_DIR to avoid version conflicts in CI
+    # CMAKE_ARGS+=("-DPython3_ROOT_DIR=$CONDA_PREFIX")
+fi
+
+# Explicitly specify Python executable to ensure correct version
+PYTHON_EXECUTABLE=$(which python3)
+if [[ -n "$PYTHON_EXECUTABLE" ]]; then
+    CMAKE_ARGS+=("-DPython3_EXECUTABLE=$PYTHON_EXECUTABLE")
+    echo "Using Python executable: $PYTHON_EXECUTABLE"
+    echo "Python version: $($PYTHON_EXECUTABLE --version)"
 fi
 
 # Add system library paths for CI environments
