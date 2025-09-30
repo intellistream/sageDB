@@ -4,7 +4,9 @@
 #include <iostream>
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 #include <cmath>
+#include <functional>
 
 #ifdef FAISS_AVAILABLE
 #include <faiss/IndexFlat.h>
@@ -156,19 +158,36 @@ public:
             std::ofstream id_file(filepath + ".ids", std::ios::binary);
             size_t map_size = id_to_vector_.size();
             id_file.write(reinterpret_cast<const char*>(&map_size), sizeof(map_size));
-            for (const auto& pair : id_to_vector_) {
-                id_file.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
-                size_t vec_size = pair.second.size();
-                id_file.write(reinterpret_cast<const char*>(&vec_size), sizeof(vec_size));
-                id_file.write(reinterpret_cast<const char*>(pair.second.data()), 
-                             vec_size * sizeof(float));
+            if (map_size > 0) {
+                if (!faiss_to_custom_id_.empty()) {
+                    for (const auto& id : faiss_to_custom_id_) {
+                        auto it = id_to_vector_.find(id);
+                        if (it == id_to_vector_.end()) {
+                            continue;
+                        }
+                        const auto& vec = it->second;
+                        id_file.write(reinterpret_cast<const char*>(&id), sizeof(id));
+                        size_t vec_size = vec.size();
+                        id_file.write(reinterpret_cast<const char*>(&vec_size), sizeof(vec_size));
+                        id_file.write(reinterpret_cast<const char*>(vec.data()), vec_size * sizeof(float));
+                    }
+                } else {
+                    for (const auto& pair : id_to_vector_) {
+                        id_file.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+                        size_t vec_size = pair.second.size();
+                        id_file.write(reinterpret_cast<const char*>(&vec_size), sizeof(vec_size));
+                        id_file.write(reinterpret_cast<const char*>(pair.second.data()),
+                                      vec_size * sizeof(float));
+                    }
+                }
             }
-            
-            // Save faiss_to_custom_id mapping
-            size_t mapping_size = faiss_to_custom_id_.size();
-            id_file.write(reinterpret_cast<const char*>(&mapping_size), sizeof(mapping_size));
-            for (VectorId id : faiss_to_custom_id_) {
-                id_file.write(reinterpret_cast<const char*>(&id), sizeof(id));
+
+            if (!faiss_to_custom_id_.empty()) {
+                std::ofstream order_file(filepath + ".order", std::ios::binary);
+                size_t order_size = faiss_to_custom_id_.size();
+                order_file.write(reinterpret_cast<const char*>(&order_size), sizeof(order_size));
+                order_file.write(reinterpret_cast<const char*>(faiss_to_custom_id_.data()),
+                                 order_size * sizeof(VectorId));
             }
         }
 #else
@@ -190,16 +209,17 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
 #ifdef FAISS_AVAILABLE
         index_.reset(faiss::read_index(filepath.c_str()));
+        is_trained_ = index_ ? index_->is_trained : false;
         
         // Load ID mapping
         std::ifstream id_file(filepath + ".ids", std::ios::binary);
         if (id_file.is_open()) {
             id_to_vector_.clear();
-            faiss_to_custom_id_.clear();
-            
+            vectors_.clear();
             size_t map_size;
             id_file.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
             
+            next_id_ = 1;
             for (size_t i = 0; i < map_size; ++i) {
                 VectorId id;
                 id_file.read(reinterpret_cast<char*>(&id), sizeof(id));
@@ -208,18 +228,26 @@ public:
                 Vector vec(vec_size);
                 id_file.read(reinterpret_cast<char*>(vec.data()), vec_size * sizeof(float));
                 id_to_vector_[id] = vec;
+                vectors_.emplace_back(id, vec);
                 next_id_ = std::max(next_id_.load(), id + 1);
             }
-            
-            // Load faiss_to_custom_id mapping
-            size_t mapping_size;
-            id_file.read(reinterpret_cast<char*>(&mapping_size), sizeof(mapping_size));
-            faiss_to_custom_id_.reserve(mapping_size);
-            for (size_t i = 0; i < mapping_size; ++i) {
-                VectorId id;
-                id_file.read(reinterpret_cast<char*>(&id), sizeof(id));
-                faiss_to_custom_id_.push_back(id);
+        }
+
+        faiss_to_custom_id_.clear();
+
+        std::ifstream order_file(filepath + ".order", std::ios::binary);
+        if (order_file.is_open()) {
+            size_t order_size = 0;
+            order_file.read(reinterpret_cast<char*>(&order_size), sizeof(order_size));
+            faiss_to_custom_id_.resize(order_size);
+            if (order_size > 0) {
+                order_file.read(reinterpret_cast<char*>(faiss_to_custom_id_.data()),
+                                 order_size * sizeof(VectorId));
             }
+        }
+
+        if (faiss_to_custom_id_.empty() && index_) {
+            rebuild_faiss_mapping_from_index();
         }
 #else
         // Fallback load implementation
@@ -256,6 +284,88 @@ private:
     std::unordered_map<VectorId, Vector> id_to_vector_;
     std::vector<VectorId> faiss_to_custom_id_;  // Map FAISS index to custom ID
     bool is_trained_ = false;
+
+    static size_t hash_vector(const Vector& vec) {
+        size_t seed = vec.size();
+        for (float v : vec) {
+            seed ^= std::hash<float>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+
+    void rebuild_faiss_mapping_from_index() {
+        if (!index_) {
+            return;
+        }
+
+        faiss_to_custom_id_.clear();
+
+        if (index_->ntotal == 0) {
+            return;
+        }
+
+        // Build hash table from stored vectors for quick lookup
+        std::unordered_multimap<size_t, VectorId> hash_to_ids;
+        hash_to_ids.reserve(id_to_vector_.size() * 2);
+        for (const auto& pair : id_to_vector_) {
+            hash_to_ids.emplace(hash_vector(pair.second), pair.first);
+        }
+
+        std::vector<float> buffer(config_.dimension);
+        faiss_to_custom_id_.reserve(index_->ntotal);
+        std::unordered_set<VectorId> used_ids;
+        used_ids.reserve(id_to_vector_.size());
+
+        for (faiss::idx_t i = 0; i < index_->ntotal; ++i) {
+            if (config_.dimension == 0) {
+                faiss_to_custom_id_.push_back(static_cast<VectorId>(i + 1));
+                continue;
+            }
+
+            index_->reconstruct(i, buffer.data());
+            size_t h = hash_vector(buffer);
+            VectorId matched_id = 0;
+
+            auto range = hash_to_ids.equal_range(h);
+            for (auto it = range.first; it != range.second; ++it) {
+                if (used_ids.count(it->second)) {
+                    continue;
+                }
+
+                const auto stored = id_to_vector_.find(it->second);
+                if (stored != id_to_vector_.end() && stored->second == buffer) {
+                    matched_id = it->second;
+                    used_ids.insert(matched_id);
+                    break;
+                }
+            }
+
+            if (matched_id == 0 && !id_to_vector_.empty()) {
+                for (const auto& pair : id_to_vector_) {
+                    if (!used_ids.count(pair.first)) {
+                        matched_id = pair.first;
+                        used_ids.insert(matched_id);
+                        break;
+                    }
+                }
+            }
+
+            if (matched_id != 0) {
+                faiss_to_custom_id_.push_back(matched_id);
+            } else {
+                faiss_to_custom_id_.push_back(static_cast<VectorId>(i + 1));
+            }
+        }
+
+        if (faiss_to_custom_id_.size() != static_cast<size_t>(index_->ntotal)) {
+            faiss_to_custom_id_.resize(index_->ntotal);
+            for (faiss::idx_t i = 0; i < index_->ntotal; ++i) {
+                if (faiss_to_custom_id_[i] == 0) {
+                    faiss_to_custom_id_[i] = static_cast<VectorId>(i + 1);
+                }
+            }
+        }
+    }
     
     void create_index() {
         faiss::MetricType metric = (config_.metric == DistanceMetric::L2) ? 
