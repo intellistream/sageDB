@@ -166,8 +166,12 @@ echo "✅ Build tools found"
 echo "Checking for FAISS..."
 FAISS_FOUND=false
 
-# Check in conda environment
-if [[ -n "$CONDA_PREFIX" ]] && [[ -f "$CONDA_PREFIX/include/faiss/IndexFlat.h" ]]; then
+# First check if Python can import faiss
+if python3 -c "import faiss; print(f'FAISS version: {faiss.__version__}')" &> /dev/null; then
+    echo "✅ Found FAISS Python package (pip/conda install)"
+    FAISS_FOUND=true
+    # For pip-installed faiss, we don't need to add special paths as it's available in Python
+elif [[ -n "$CONDA_PREFIX" ]] && [[ -f "$CONDA_PREFIX/include/faiss/IndexFlat.h" ]]; then
     echo "✅ Found FAISS in conda environment: $CONDA_PREFIX"
     FAISS_FOUND=true
     export CMAKE_PREFIX_PATH="$CONDA_PREFIX:$CMAKE_PREFIX_PATH"
