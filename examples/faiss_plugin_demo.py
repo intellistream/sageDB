@@ -51,7 +51,9 @@ def build_fallback_config(dimension: int = 8) -> _sage_db.DatabaseConfig:
     return cfg
 
 
-def generate_vectors(dim: int, count: int = 64) -> Tuple[np.ndarray, List[Dict[str, str]]]:
+def generate_vectors(
+    dim: int, count: int = 64
+) -> Tuple[np.ndarray, List[Dict[str, str]]]:
     rng = np.random.default_rng(seed=13)
     raw = rng.normal(size=(count, dim)).astype("float32")
     # Normalise to unit vectors for cosine distance
@@ -59,15 +61,19 @@ def generate_vectors(dim: int, count: int = 64) -> Tuple[np.ndarray, List[Dict[s
     vectors = raw / norms
     metadata: List[Dict[str, str]] = []
     for idx in range(count):
-        metadata.append({
-            "id": f"vec-{idx}",
-            "bucket": str(idx // 8),
-            "parity": "even" if idx % 2 == 0 else "odd",
-        })
+        metadata.append(
+            {
+                "id": f"vec-{idx}",
+                "bucket": str(idx // 8),
+                "parity": "even" if idx % 2 == 0 else "odd",
+            }
+        )
     return vectors, metadata
 
 
-def ingest_numpy_batch(db: _sage_db.SageDB, vectors: np.ndarray, metadata: List[Dict[str, str]]) -> None:
+def ingest_numpy_batch(
+    db: _sage_db.SageDB, vectors: np.ndarray, metadata: List[Dict[str, str]]
+) -> None:
     print(f"➕ ingesting {len(vectors)} vectors via add_batch (numpy)")
     _sage_db.add_numpy(db, vectors, metadata)
     print("   stored vectors:", db.size())
@@ -114,12 +120,14 @@ def main() -> None:
     run_demo(db, query)
 
     print("\nℹ️ resolved config:")
-    print({
-        "algorithm": db.config().anns_algorithm,
-        "metric": db.config().metric.name,
-        "anns_build_params": dict(db.config().anns_build_params),
-        "anns_query_params": dict(db.config().anns_query_params),
-    })
+    print(
+        {
+            "algorithm": db.config().anns_algorithm,
+            "metric": db.config().metric.name,
+            "anns_build_params": dict(db.config().anns_build_params),
+            "anns_query_params": dict(db.config().anns_query_params),
+        }
+    )
 
 
 if __name__ == "__main__":
