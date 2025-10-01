@@ -71,6 +71,8 @@ set(SAGE_DB_SOURCES
     src/vector_store.cpp
     src/metadata_store.cpp
     src/query_engine.cpp
+    src/anns/anns_interface.cpp
+    src/anns/brute_force_plugin.cpp
 )
 
 set(SAGE_DB_HEADERS
@@ -79,7 +81,14 @@ set(SAGE_DB_HEADERS
     include/sage_db/metadata_store.h
     include/sage_db/query_engine.h
     include/sage_db/common.h
+    include/sage_db/anns/anns_interface.h
+    include/sage_db/anns/brute_force_plugin.h
 )
+
+if(FAISS_FOUND)
+    list(APPEND SAGE_DB_SOURCES src/anns/faiss_plugin.cpp)
+    list(APPEND SAGE_DB_HEADERS include/sage_db/anns/faiss_plugin.h)
+endif()
 
 # Multimodal fusion sources and headers
 if(ENABLE_MULTIMODAL)
@@ -111,7 +120,7 @@ if(FAISS_FOUND)
     if(HAVE_BLAS_LAPACK)
         target_link_libraries(sage_db PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
     endif()
-    target_compile_definitions(sage_db PRIVATE FAISS_AVAILABLE)
+    target_compile_definitions(sage_db PRIVATE ENABLE_FAISS)
 endif()
 
 # Multimodal fusion dependencies
@@ -172,6 +181,12 @@ if(BUILD_PYTHON_BINDINGS)
     pybind11_add_module(_sage_db python/bindings.cpp)
     target_link_libraries(_sage_db PRIVATE sage_db)
     target_compile_definitions(_sage_db PRIVATE VERSION_INFO="${PROJECT_VERSION}")
+
+    if(FAISS_FOUND)
+        target_compile_definitions(_sage_db PRIVATE ENABLE_FAISS)
+        target_include_directories(_sage_db PRIVATE ${FAISS_INCLUDE_DIR})
+        target_link_libraries(_sage_db PRIVATE ${FAISS_LIBRARY})
+    endif()
 
     if(DEFINED SAGE_COMMON_COMPILE_DEFINITIONS)
         target_compile_definitions(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_DEFINITIONS})

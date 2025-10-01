@@ -8,7 +8,7 @@ namespace py = pybind11;
 using namespace sage_db;
 
 PYBIND11_MODULE(_sage_db, m) {
-    m.doc() = "SAGE Database - High-performance vector database with FAISS backend";
+    m.doc() = "SAGE Database - High-performance vector database with pluggable ANNS backends";
     
     // Exceptions
     py::register_exception<SageDBException>(m, "SageDBException");
@@ -58,13 +58,18 @@ PYBIND11_MODULE(_sage_db, m) {
         .def_readwrite("m", &DatabaseConfig::m)
         .def_readwrite("nbits", &DatabaseConfig::nbits)
         .def_readwrite("M", &DatabaseConfig::M)
-        .def_readwrite("efConstruction", &DatabaseConfig::efConstruction);
+        .def_readwrite("efConstruction", &DatabaseConfig::efConstruction)
+        .def_readwrite("anns_algorithm", &DatabaseConfig::anns_algorithm)
+        .def_readwrite("anns_build_params", &DatabaseConfig::anns_build_params)
+        .def_readwrite("anns_query_params", &DatabaseConfig::anns_query_params);
     
     // VectorStore
     py::class_<VectorStore>(m, "VectorStore")
         .def(py::init<const DatabaseConfig&>())
         .def("add_vector", &VectorStore::add_vector)
         .def("add_vectors", &VectorStore::add_vectors)
+        .def("remove_vector", &VectorStore::remove_vector)
+        .def("update_vector", &VectorStore::update_vector)
         .def("search", &VectorStore::search)
         .def("build_index", &VectorStore::build_index)
         .def("train_index", &VectorStore::train_index)

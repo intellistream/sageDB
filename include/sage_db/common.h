@@ -5,6 +5,7 @@
 #include <memory>
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 
 namespace sage_db {
 
@@ -65,6 +66,11 @@ struct DatabaseConfig {
     IndexType index_type = IndexType::AUTO;
     DistanceMetric metric = DistanceMetric::L2;
     Dimension dimension = 0;
+
+    // ANNS algorithm selection (default maps AUTO -> brute_force)
+    std::string anns_algorithm = "brute_force";
+    std::unordered_map<std::string, std::string> anns_build_params;
+    std::unordered_map<std::string, std::string> anns_query_params;
     
     // IVF specific parameters
     uint32_t nlist = 100;         // Number of clusters for IVF

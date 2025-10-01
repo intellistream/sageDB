@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.h"
-#include <atomic>
+#include "anns/anns_interface.h"
 #include <mutex>
 
 namespace sage_db {
@@ -45,7 +45,6 @@ private:
     class Impl;
     std::unique_ptr<Impl> impl_;
     DatabaseConfig config_;
-    std::atomic<VectorId> next_id_;
     mutable std::mutex mutex_;
     
     // Helper methods
