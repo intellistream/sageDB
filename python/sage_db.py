@@ -93,7 +93,15 @@ except ImportError:  # pragma: no cover - repo/local build fallback
                 break
 
     if _sage_db is None:
-        _sage_db = importlib.import_module("_sage_db")  # type: ignore
+        try:
+            _sage_db = importlib.import_module("_sage_db")  # type: ignore
+        except ImportError as import_error:
+            searched_paths = [str(p) for p in candidates if p.exists()]
+            raise ImportError(
+                "_sage_db native module not found. Install it via 'sage extensions install sage_db' "
+                "(append --force to rebuild if necessary). "
+                f"Searched in: {searched_paths}"
+            ) from import_error
 
 
 # Re-export C++ classes and enums

@@ -4,10 +4,9 @@ These lightweight scripts demonstrate how to interact with the rebuilt SageDB co
 
 ## Prerequisites
 
-1. Build the SageDB native extension:
+1. Install the SageDB native extension (run once per environment):
    ```bash
-   cd packages/sage-middleware/src/sage/middleware/components/sage_db
-   ./build.sh
+   sage extensions install sage_db  # append --force to rebuild if needed
    ```
 2. Ensure the repository root is on your `PYTHONPATH` (each script does this automatically by appending `packages/`).
 

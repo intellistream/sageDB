@@ -33,10 +33,11 @@
 ### 构建
 
 ```bash
-# 进入SAGE DB目录
-cd packages/sage-middleware/src/sage/middleware/components/sage_db
+# 推荐：通过 CLI 安装原生扩展
+sage extensions install sage_db  # 需要重新编译时可追加 --force
 
-# 运行构建脚本
+# 可选：在组件目录手动运行构建脚本（调试/定制场景）
+cd packages/sage-middleware/src/sage/middleware/components/sage_db
 ./build_multimodal.sh
 ```
 

@@ -15,11 +15,11 @@ if str(PACKAGES_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGES_ROOT))
 
 try:
-    import _sage_db
+    import _sage_db  # type: ignore[import]
 except ImportError as exc:  # pragma: no cover - documented failure mode
     raise SystemExit(
-        "❌ Unable to import _sage_db. Build the native extension first:\n"
-        "   cd packages/sage-middleware/src/sage/middleware/components/sage_db && ./build.sh"
+        "❌ Unable to import _sage_db. Please install the extension with:\n"
+        "   sage extensions install sage_db  # add --force to rebuild"
     ) from exc
 
 
