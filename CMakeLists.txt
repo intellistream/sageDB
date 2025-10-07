@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build options
 option(BUILD_TESTS "Build test programs" ON)
-option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 option(USE_OPENMP "Enable OpenMP support" ON)
 option(ENABLE_MULTIMODAL "Enable multimodal fusion support" ON)
 option(ENABLE_OPENCV "Enable OpenCV for image processing" OFF)
@@ -159,79 +158,6 @@ target_compile_options(sage_db PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /O2>
 )
 
-# Python bindings
-if(BUILD_PYTHON_BINDINGS)
-    # Use same pattern as sage_flow - let pybind11 handle Python detection
-    # find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-
-    set(_sage_db_deps_included FALSE)
-    if(DEFINED SAGE_COMMON_DEPS_FILE AND EXISTS "${SAGE_COMMON_DEPS_FILE}")
-        include("${SAGE_COMMON_DEPS_FILE}")
-        set(_sage_db_deps_included TRUE)
-    endif()
-
-    if(NOT _sage_db_deps_included)
-        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pybind11_dependency.cmake)
-    endif()
-
-    if(ENABLE_GPERFTOOLS AND NOT (DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS))
-        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gperftools.cmake)
-    endif()
-
-    pybind11_add_module(_sage_db python/bindings.cpp)
-    target_link_libraries(_sage_db PRIVATE sage_db)
-    target_compile_definitions(_sage_db PRIVATE VERSION_INFO="${PROJECT_VERSION}")
-
-    if(FAISS_FOUND)
-        target_compile_definitions(_sage_db PRIVATE ENABLE_FAISS)
-        target_include_directories(_sage_db PRIVATE ${FAISS_INCLUDE_DIR})
-        target_link_libraries(_sage_db PRIVATE ${FAISS_LIBRARY})
-    endif()
-
-    if(DEFINED SAGE_COMMON_COMPILE_DEFINITIONS)
-        target_compile_definitions(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_DEFINITIONS})
-    else()
-        target_compile_definitions(_sage_db PRIVATE PYBIND11_INTERNALS_ID="sage_pybind11_shared")
-    endif()
-
-    if(DEFINED SAGE_COMMON_COMPILE_OPTIONS)
-        target_compile_options(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_OPTIONS})
-    else()
-        # Minimize exported symbols (align with _sage_flow) to avoid cross-extension symbol collisions
-        target_compile_options(_sage_db PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
-    endif()
-
-    if(ENABLE_GPERFTOOLS)
-        if(DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS)
-            target_link_libraries(sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
-            target_link_libraries(_sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
-            target_compile_definitions(sage_db PRIVATE ENABLE_GPERFTOOLS)
-            target_compile_definitions(_sage_db PRIVATE ENABLE_GPERFTOOLS)
-        else()
-            message(WARNING "ENABLE_GPERFTOOLS requested but gperftools libraries were not found; disabling support")
-            set(ENABLE_GPERFTOOLS OFF CACHE BOOL "Enable gperftools profiling support" FORCE)
-        endif()
-    endif()
-    set_target_properties(_sage_db PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-    
-    # 禁用 LTO 以避免链接器问题，设置输出属性
-    set_target_properties(_sage_db PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION OFF
-        OUTPUT_NAME "_sage_db"
-        PREFIX ""
-        # 设置RPATH以便Python模块能找到共享库
-        BUILD_RPATH "${CMAKE_CURRENT_BINARY_DIR};${CMAKE_INSTALL_PREFIX}/lib"
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../build;$ORIGIN/../install/lib;$ORIGIN/../../install/lib"
-        INSTALL_RPATH_USE_LINK_PATH TRUE
-    )
-    
-    # 在某些系统上，pybind11 默认启用 LTO，我们需要显式禁用
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_options(_sage_db PRIVATE -fno-lto)
-        target_link_options(_sage_db PRIVATE -fno-lto)
-    endif()
-endif()
-
 # Tests
 if(BUILD_TESTS)
     enable_testing()
@@ -261,7 +187,3 @@ install(TARGETS sage_db
 )
 
 install(DIRECTORY include/ DESTINATION include)
-
-if(BUILD_PYTHON_BINDINGS)
-    install(TARGETS _sage_db DESTINATION .)
-endif()
