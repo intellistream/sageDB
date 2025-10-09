@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "anns/anns_interface.h"
-#include <mutex>
+#include <shared_mutex>
 
 namespace sage_db {
 
@@ -45,7 +45,7 @@ private:
     class Impl;
     std::unique_ptr<Impl> impl_;
     DatabaseConfig config_;
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;  // Allow concurrent reads!
     
     // Helper methods
     void validate_vector(const Vector& vector) const;

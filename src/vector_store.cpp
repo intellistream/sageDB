@@ -9,6 +9,8 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -379,24 +381,24 @@ VectorStore::VectorStore(const DatabaseConfig& config)
 VectorStore::~VectorStore() = default;
 
 VectorId VectorStore::add_vector(const Vector& vector) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     validate_vector(vector);
     return impl_->add_vector(vector);
 }
 
 bool VectorStore::remove_vector(VectorId id) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     return impl_->remove_vector(id);
 }
 
 bool VectorStore::update_vector(VectorId id, const Vector& vector) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     validate_vector(vector);
     return impl_->update_vector(id, vector);
 }
 
 std::vector<VectorId> VectorStore::add_vectors(const std::vector<Vector>& vectors) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     for (const auto& vec : vectors) {
         validate_vector(vec);
     }
@@ -404,14 +406,14 @@ std::vector<VectorId> VectorStore::add_vectors(const std::vector<Vector>& vector
 }
 
 std::vector<QueryResult> VectorStore::search(const Vector& query, const SearchParams& params) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);  // Allow concurrent reads!
     validate_vector(query);
     return impl_->search(query, params);
 }
 
 std::vector<std::vector<QueryResult>> VectorStore::batch_search(
     const std::vector<Vector>& queries, const SearchParams& params) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);  // Allow concurrent reads!
     for (const auto& query : queries) {
         validate_vector(query);
     }
@@ -419,22 +421,22 @@ std::vector<std::vector<QueryResult>> VectorStore::batch_search(
 }
 
 void VectorStore::build_index() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     impl_->build_index();
 }
 
 void VectorStore::train_index(const std::vector<Vector>& training_data) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     impl_->set_training_data(training_data);
 }
 
 bool VectorStore::is_trained() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);  // Allow concurrent reads!
     return impl_->is_trained();
 }
 
 size_t VectorStore::size() const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);  // Allow concurrent reads!
     return impl_->size();
 }
 
@@ -447,12 +449,12 @@ IndexType VectorStore::index_type() const {
 }
 
 void VectorStore::save(const std::string& filepath) const {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::shared_lock<std::shared_mutex> lock(mutex_);  // Read-only operation
     impl_->save(filepath);
 }
 
 void VectorStore::load(const std::string& filepath) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);  // Exclusive write lock
     impl_->load(filepath);
     config_ = impl_->config();
 }
