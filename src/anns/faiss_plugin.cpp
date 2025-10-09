@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cctype>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -41,7 +42,12 @@ FaissANNS::~FaissANNS() = default;
 
 std::string FaissANNS::version() const {
 #ifdef ENABLE_FAISS
-    return std::string(VERSION_STRING);
+    std::ostringstream oss;
+    oss << "FAISS " << FAISS_VERSION_MAJOR << '.' << FAISS_VERSION_MINOR;
+#ifdef FAISS_VERSION_PATCH
+    oss << '.' << FAISS_VERSION_PATCH;
+#endif
+    return oss.str();
 #else
     return "unavailable";
 #endif
