@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include <faiss/Index.h>
+#include <faiss/impl/FaissAssert.h>
 
 namespace sage_db {
 namespace anns {

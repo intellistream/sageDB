@@ -18,6 +18,7 @@
 #include <faiss/IndexIVFFlat.h>
 #include <faiss/IndexIVFPQ.h>
 #include <faiss/index_io.h>
+#include <faiss/impl/FaissAssert.h>
 #endif
 
 namespace sage_db {
