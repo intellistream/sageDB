@@ -130,7 +130,6 @@ void FaissANNS::fit(const std::vector<VectorEntry>& dataset,
         } else {
             index_type_ = IndexType::FLAT;
         }
-        build_params_.set_raw("resolved_index_type", index_type_to_string(index_type_));
     }
     build_params_.set_raw("resolved_index_type", index_type_to_string(index_type_));
     last_index_size_bytes_ = 0;
