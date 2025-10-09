@@ -299,13 +299,8 @@ ANNSResult BruteForceANNS::perform_query(const Vector& query_vector,
     };
 
     uint32_t k = std::min(static_cast<uint32_t>(scored_results.size()), config.k);
-    if (metric_ == DistanceMetric::INNER_PRODUCT) {
-        std::partial_sort(scored_results.begin(), scored_results.begin() + k,
-                          scored_results.end(), comparator);
-    } else {
-        std::partial_sort(scored_results.begin(), scored_results.begin() + k,
-                          scored_results.end(), comparator);
-    }
+    std::partial_sort(scored_results.begin(), scored_results.begin() + k,
+                      scored_results.end(), comparator);
 
     auto end = std::chrono::high_resolution_clock::now();
     metrics_.search_time_seconds = std::chrono::duration<double>(end - start).count();
