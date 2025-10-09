@@ -3,10 +3,7 @@
 #include "sage_db/anns/anns_interface.h"
 #include <cstdint>
 
-namespace faiss {
-class Index;
-using idx_t = int64_t;
-}
+#include <faiss/Index.h>
 
 namespace sage_db {
 namespace anns {
