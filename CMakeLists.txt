@@ -114,7 +114,8 @@ target_include_directories(sage_db PUBLIC
 )
 
 if(FAISS_FOUND)
-    target_include_directories(sage_db PRIVATE ${FAISS_INCLUDE_DIR})
+    # target_include_directories(sage_db PRIVATE ${FAISS_INCLUDE_DIR})
+    target_include_directories(sage_db PUBLIC ${FAISS_INCLUDE_DIR})
     target_link_libraries(sage_db PRIVATE ${FAISS_LIBRARY})
     if(HAVE_BLAS_LAPACK)
         target_link_libraries(sage_db PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
