@@ -3,6 +3,8 @@
 #include "sage_db/anns/anns_interface.h"
 #include <cstdint>
 
+#include <faiss/MetricType.h>
+
 #include <faiss/Index.h>
 #include <faiss/impl/FaissAssert.h>
 
