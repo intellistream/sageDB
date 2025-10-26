@@ -3,6 +3,10 @@
 #include "sage_db/anns/anns_interface.h"
 #include <cstdint>
 
+namespace faiss {
+    using idx_t = int64_t;
+}
+
 #include <faiss/MetricType.h>
 
 #include <faiss/Index.h>
