@@ -179,12 +179,20 @@ if(BUILD_TESTS)
 endif()
 
 # Install rules - 条件化安装以支持 SKBUILD 和独立构建
-if(DEFINED SKBUILD_PLATLIB_DIR)
-    # Python 包构建模式：安装到源码树 python/ 目录（与 Python 扩展同目录）
+if(DEFINED SKBUILD)
+    if(SKBUILD_STATE STREQUAL "editable")
+        # Editable install: install to source tree directly
+        set(_lib_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/python")
+    else()
+        # Wheel build: install to wheel platlib (same directory as Python extension)
+        set(_lib_install_dest "${SKBUILD_PLATLIB_DIR}/sage/middleware/components/sage_db/python")
+    endif()
+    
     install(TARGETS sage_db
-        LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
-        ARCHIVE DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
-        RUNTIME DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
+        LIBRARY DESTINATION ${_lib_install_dest}
+        ARCHIVE DESTINATION ${_lib_install_dest}
+        RUNTIME DESTINATION ${_lib_install_dest}
+        COMPONENT python
     )
 else()
     # 独立 C++ 构建模式：标准安装路径
