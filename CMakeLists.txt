@@ -178,10 +178,16 @@ if(BUILD_TESTS)
     endif()
 endif()
 
-# Install rules
-# Standard install for standalone builds
-# (Python bindings handle their own install in python/CMakeLists.txt for SKBUILD)
-if(NOT DEFINED SKBUILD OR SKBUILD_STATE STREQUAL "wheel")
+# Install rules - 条件化安装以支持 SKBUILD 和独立构建
+if(DEFINED SKBUILD_PLATLIB_DIR)
+    # Python 包构建模式：安装到源码树 python/ 目录（与 Python 扩展同目录）
+    install(TARGETS sage_db
+        LIBRARY DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
+        ARCHIVE DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
+        RUNTIME DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/python
+    )
+else()
+    # 独立 C++ 构建模式：标准安装路径
     install(TARGETS sage_db
         EXPORT sage_db_targets
         LIBRARY DESTINATION lib
