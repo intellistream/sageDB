@@ -179,11 +179,25 @@ if(BUILD_TESTS)
 endif()
 
 # Install rules
-install(TARGETS sage_db
-    EXPORT sage_db_targets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+# Standard install for standalone builds
+# (Python bindings handle their own install in python/CMakeLists.txt for SKBUILD)
+if(NOT DEFINED SKBUILD OR SKBUILD_STATE STREQUAL "wheel")
+    install(TARGETS sage_db
+        EXPORT sage_db_targets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(DIRECTORY include/ DESTINATION include)
+
+# ============================================================================
+# Python bindings (optional)
+# ============================================================================
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
+if(BUILD_PYTHON_BINDINGS)
+    message(STATUS "Building Python bindings for sage_db")
+    add_subdirectory(python)
+endif()
