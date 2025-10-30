@@ -178,12 +178,52 @@ if(BUILD_TESTS)
     endif()
 endif()
 
-# Install rules
-install(TARGETS sage_db
-    EXPORT sage_db_targets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+# Install rules - 条件化安装以支持 SKBUILD 和独立构建
+if(DEFINED SKBUILD)
+    # 判断是否是 editable install
+    # SKBUILD_STATE 可能是 "editable" 或 "wheel" 或未定义
+    # 如果未定义或不是 "wheel"，默认按 editable 处理
+    set(_is_editable TRUE)
+    if(DEFINED SKBUILD_STATE)
+        if(SKBUILD_STATE STREQUAL "wheel")
+            set(_is_editable FALSE)
+        endif()
+    endif()
+    
+    if(_is_editable)
+        # Editable install: install to source tree directly
+        set(_lib_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/python")
+        message(STATUS "sageDB: Editable install, lib -> ${_lib_install_dest}")
+    else()
+        # Wheel build: install to wheel platlib (same directory as Python extension)
+        set(_lib_install_dest "${SKBUILD_PLATLIB_DIR}/sage/middleware/components/sage_db/python")
+        message(STATUS "sageDB: Wheel build, lib -> ${_lib_install_dest}")
+    endif()
+    
+    install(TARGETS sage_db
+        LIBRARY DESTINATION ${_lib_install_dest}
+        ARCHIVE DESTINATION ${_lib_install_dest}
+        RUNTIME DESTINATION ${_lib_install_dest}
+        COMPONENT python
+    )
+else()
+    # 独立 C++ 构建模式：标准安装路径
+    install(TARGETS sage_db
+        EXPORT sage_db_targets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(DIRECTORY include/ DESTINATION include)
+
+# ============================================================================
+# Python bindings (optional)
+# ============================================================================
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
+if(BUILD_PYTHON_BINDINGS)
+    message(STATUS "Building Python bindings for sage_db")
+    add_subdirectory(python)
+endif()
