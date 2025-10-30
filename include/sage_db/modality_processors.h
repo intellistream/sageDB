@@ -1,7 +1,9 @@
 #pragma once
 
 #include "multimodal_fusion.h"
+#ifdef OPENCV_ENABLED
 #include <opencv2/opencv.hpp>  // 需要OpenCV库
+#endif
 #include <string>
 #include <regex>
 
@@ -17,7 +19,8 @@ public:
         bool use_bert_tokenization = true;
     };
     
-    explicit TextModalityProcessor(const TextConfig& config = TextConfig{});
+    TextModalityProcessor();
+    explicit TextModalityProcessor(const TextConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -44,7 +47,8 @@ public:
         std::vector<std::string> supported_formats = {"jpg", "jpeg", "png", "bmp", "tiff"};
     };
     
-    explicit ImageModalityProcessor(const ImageConfig& config = ImageConfig{});
+    ImageModalityProcessor();
+    explicit ImageModalityProcessor(const ImageConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -52,12 +56,13 @@ public:
 
 private:
     ImageConfig config_;
-    
+#ifdef OPENCV_ENABLED
     cv::Mat bytes_to_mat(const std::vector<uint8_t>& data) const;
     cv::Mat preprocess_image(const cv::Mat& image) const;
     Vector extract_features(const cv::Mat& image) const;
     Vector compute_histogram_features(const cv::Mat& image) const;
     Vector compute_texture_features(const cv::Mat& image) const;
+#endif
     bool is_valid_image_format(const std::vector<uint8_t>& data) const;
 };
 
@@ -74,7 +79,8 @@ public:
         std::vector<std::string> supported_formats = {"wav", "mp3", "flac", "m4a"};
     };
     
-    explicit AudioModalityProcessor(const AudioConfig& config = AudioConfig{});
+    AudioModalityProcessor();
+    explicit AudioModalityProcessor(const AudioConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -104,7 +110,8 @@ public:
         std::vector<std::string> supported_formats = {"mp4", "avi", "mov", "mkv"};
     };
     
-    explicit VideoModalityProcessor(const VideoConfig& config = VideoConfig{});
+    VideoModalityProcessor();
+    explicit VideoModalityProcessor(const VideoConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -115,10 +122,12 @@ private:
     std::shared_ptr<ImageModalityProcessor> image_processor_;
     std::shared_ptr<AudioModalityProcessor> audio_processor_;
     
+#ifdef OPENCV_ENABLED
     std::vector<cv::Mat> extract_frames(const std::vector<uint8_t>& video_data) const;
     Vector aggregate_frame_features(const std::vector<Vector>& frame_embeddings) const;
     Vector extract_motion_features(const std::vector<cv::Mat>& frames) const;
     Vector extract_temporal_features(const std::vector<Vector>& frame_embeddings) const;
+#endif
     bool is_valid_video_format(const std::vector<uint8_t>& data) const;
 };
 
@@ -135,7 +144,8 @@ public:
         std::vector<std::string> supported_formats = {"csv", "tsv", "json"};
     };
     
-    explicit TabularModalityProcessor(const TabularConfig& config = TabularConfig{});
+    TabularModalityProcessor();
+    explicit TabularModalityProcessor(const TabularConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -171,7 +181,8 @@ public:
         bool extract_seasonality = true;
     };
     
-    explicit TimeSeriesModalityProcessor(const TimeSeriesConfig& config = TimeSeriesConfig{});
+    TimeSeriesModalityProcessor();
+    explicit TimeSeriesModalityProcessor(const TimeSeriesConfig& config);
     
     Vector process(const std::vector<uint8_t>& raw_data) override;
     bool validate(const std::vector<uint8_t>& raw_data) const override;
@@ -193,22 +204,22 @@ class ModalityProcessorFactory {
 public:
     // 创建标准处理器
     static std::shared_ptr<ModalityProcessor> create_text_processor(
-        const TextModalityProcessor::TextConfig& config = {});
+        TextModalityProcessor::TextConfig config = {});
     
     static std::shared_ptr<ModalityProcessor> create_image_processor(
-        const ImageModalityProcessor::ImageConfig& config = {});
+        ImageModalityProcessor::ImageConfig config = {});
     
     static std::shared_ptr<ModalityProcessor> create_audio_processor(
-        const AudioModalityProcessor::AudioConfig& config = {});
+        AudioModalityProcessor::AudioConfig config = {});
     
     static std::shared_ptr<ModalityProcessor> create_video_processor(
-        const VideoModalityProcessor::VideoConfig& config = {});
+        VideoModalityProcessor::VideoConfig config = {});
     
     static std::shared_ptr<ModalityProcessor> create_tabular_processor(
-        const TabularModalityProcessor::TabularConfig& config = {});
+        TabularModalityProcessor::TabularConfig config = {});
     
     static std::shared_ptr<ModalityProcessor> create_time_series_processor(
-        const TimeSeriesModalityProcessor::TimeSeriesConfig& config = {});
+        TimeSeriesModalityProcessor::TimeSeriesConfig config = {});
     
     // 批量创建处理器
     static std::unordered_map<ModalityType, std::shared_ptr<ModalityProcessor>> 

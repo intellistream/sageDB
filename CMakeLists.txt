@@ -95,12 +95,14 @@ if(ENABLE_MULTIMODAL)
         src/multimodal_sage_db.cpp
         src/fusion_strategies.cpp
         src/modality_manager.cpp
+        src/modality_processors.cpp
     )
     
     list(APPEND SAGE_DB_HEADERS
         include/sage_db/multimodal_fusion.h
         include/sage_db/multimodal_sage_db.h
         include/sage_db/fusion_strategies.h
+        include/sage_db/modality_processors.h
     )
 endif()
 
