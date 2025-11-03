@@ -33,10 +33,11 @@
 ### 构建
 
 ```bash
-# 进入SAGE DB目录
-cd packages/sage-middleware/src/sage/middleware/components/sage_db
+# 推荐：通过 CLI 安装原生扩展
+sage extensions install sage_db  # 需要重新编译时可追加 --force
 
-# 运行构建脚本
+# 可选：在组件目录手动运行构建脚本（调试/定制场景）
+cd packages/sage-middleware/src/sage/middleware/components/sage_db
 ./build_multimodal.sh
 ```
 
@@ -129,6 +130,12 @@ cd build_multimodal
 export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
 ./multimodal_example
 ```
+
+## 持久化与部署注意事项
+
+- `build.sh` 会在 `python/` 与 `install/` 目录下安装 `_sage_db*.so`，并生成 `*.ids` 与新的 `*.order` 映射文件，确保 FAISS 向量与自定义向量 ID 在重新加载后保持一致。
+- 如果需要完全清理构建产物，请同时删除 `build/`、`install/`、`python/_sage_db*.so` 以及对应的 `*.ids`、`*.order` 文件，避免旧的映射干扰新的部署。
+- 在 CI 环境中，如果只复制安装目录，务必包含 `*.order` 文件，否则 Python 侧的相似度查询会因为 ID 映射缺失而得到空结果。
 
 ## 架构设计
 

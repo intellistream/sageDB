@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build options
 option(BUILD_TESTS "Build test programs" ON)
-option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 option(USE_OPENMP "Enable OpenMP support" ON)
 option(ENABLE_MULTIMODAL "Enable multimodal fusion support" ON)
 option(ENABLE_OPENCV "Enable OpenCV for image processing" OFF)
@@ -52,7 +51,8 @@ if(FAISS_INCLUDE_DIR AND FAISS_LIBRARY)
     message(STATUS "Found FAISS: ${FAISS_LIBRARY}")
     set(FAISS_FOUND TRUE)
 else()
-    message(WARNING "FAISS not found, will install via conda in build script")
+    message(STATUS "FAISS C++ library not found, using fallback implementation")
+    message(STATUS "Note: Python faiss package should be available for full functionality")
     set(FAISS_FOUND FALSE)
 endif()
 
@@ -70,6 +70,8 @@ set(SAGE_DB_SOURCES
     src/vector_store.cpp
     src/metadata_store.cpp
     src/query_engine.cpp
+    src/anns/anns_interface.cpp
+    src/anns/brute_force_plugin.cpp
 )
 
 set(SAGE_DB_HEADERS
@@ -78,7 +80,14 @@ set(SAGE_DB_HEADERS
     include/sage_db/metadata_store.h
     include/sage_db/query_engine.h
     include/sage_db/common.h
+    include/sage_db/anns/anns_interface.h
+    include/sage_db/anns/brute_force_plugin.h
 )
+
+if(FAISS_FOUND)
+    list(APPEND SAGE_DB_SOURCES src/anns/faiss_plugin.cpp)
+    list(APPEND SAGE_DB_HEADERS include/sage_db/anns/faiss_plugin.h)
+endif()
 
 # Multimodal fusion sources and headers
 if(ENABLE_MULTIMODAL)
@@ -110,7 +119,7 @@ if(FAISS_FOUND)
     if(HAVE_BLAS_LAPACK)
         target_link_libraries(sage_db PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
     endif()
-    target_compile_definitions(sage_db PRIVATE FAISS_AVAILABLE)
+    target_compile_definitions(sage_db PRIVATE ENABLE_FAISS)
 endif()
 
 # Multimodal fusion dependencies
@@ -149,72 +158,6 @@ target_compile_options(sage_db PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /O2>
 )
 
-# Python bindings
-if(BUILD_PYTHON_BINDINGS)
-    find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-
-    set(_sage_db_deps_included FALSE)
-    if(DEFINED SAGE_COMMON_DEPS_FILE AND EXISTS "${SAGE_COMMON_DEPS_FILE}")
-        include("${SAGE_COMMON_DEPS_FILE}")
-        set(_sage_db_deps_included TRUE)
-    endif()
-
-    if(NOT _sage_db_deps_included)
-        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/pybind11_dependency.cmake)
-    endif()
-
-    if(ENABLE_GPERFTOOLS AND NOT (DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS))
-        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/gperftools.cmake)
-    endif()
-
-    pybind11_add_module(_sage_db python/bindings.cpp)
-    target_link_libraries(_sage_db PRIVATE sage_db)
-    target_compile_definitions(_sage_db PRIVATE VERSION_INFO="${PROJECT_VERSION}")
-
-    if(DEFINED SAGE_COMMON_COMPILE_DEFINITIONS)
-        target_compile_definitions(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_DEFINITIONS})
-    else()
-        target_compile_definitions(_sage_db PRIVATE PYBIND11_INTERNALS_ID="sage_pybind11_shared")
-    endif()
-
-    if(DEFINED SAGE_COMMON_COMPILE_OPTIONS)
-        target_compile_options(_sage_db PRIVATE ${SAGE_COMMON_COMPILE_OPTIONS})
-    else()
-        # Minimize exported symbols (align with _sage_flow) to avoid cross-extension symbol collisions
-        target_compile_options(_sage_db PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
-    endif()
-
-    if(ENABLE_GPERFTOOLS)
-        if(DEFINED SAGE_GPERFTOOLS_LIBS AND SAGE_GPERFTOOLS_LIBS)
-            target_link_libraries(sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
-            target_link_libraries(_sage_db PRIVATE ${SAGE_GPERFTOOLS_LIBS})
-            target_compile_definitions(sage_db PRIVATE ENABLE_GPERFTOOLS)
-            target_compile_definitions(_sage_db PRIVATE ENABLE_GPERFTOOLS)
-        else()
-            message(WARNING "ENABLE_GPERFTOOLS requested but gperftools libraries were not found; disabling support")
-            set(ENABLE_GPERFTOOLS OFF CACHE BOOL "Enable gperftools profiling support" FORCE)
-        endif()
-    endif()
-    set_target_properties(_sage_db PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-    
-    # 禁用 LTO 以避免链接器问题，设置输出属性
-    set_target_properties(_sage_db PROPERTIES
-        INTERPROCEDURAL_OPTIMIZATION OFF
-        OUTPUT_NAME "_sage_db"
-        PREFIX ""
-        # 设置RPATH以便Python模块能找到共享库
-        BUILD_RPATH "${CMAKE_CURRENT_BINARY_DIR};${CMAKE_INSTALL_PREFIX}/lib"
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;$ORIGIN/../build;$ORIGIN/../install/lib;$ORIGIN/../../install/lib"
-        INSTALL_RPATH_USE_LINK_PATH TRUE
-    )
-    
-    # 在某些系统上，pybind11 默认启用 LTO，我们需要显式禁用
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        target_compile_options(_sage_db PRIVATE -fno-lto)
-        target_link_options(_sage_db PRIVATE -fno-lto)
-    endif()
-endif()
-
 # Tests
 if(BUILD_TESTS)
     enable_testing()
@@ -235,16 +178,52 @@ if(BUILD_TESTS)
     endif()
 endif()
 
-# Install rules
-install(TARGETS sage_db
-    EXPORT sage_db_targets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-)
+# Install rules - 条件化安装以支持 SKBUILD 和独立构建
+if(DEFINED SKBUILD)
+    # 判断是否是 editable install
+    # SKBUILD_STATE 可能是 "editable" 或 "wheel" 或未定义
+    # 如果未定义或不是 "wheel"，默认按 editable 处理
+    set(_is_editable TRUE)
+    if(DEFINED SKBUILD_STATE)
+        if(SKBUILD_STATE STREQUAL "wheel")
+            set(_is_editable FALSE)
+        endif()
+    endif()
+    
+    if(_is_editable)
+        # Editable install: install to source tree directly
+        set(_lib_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/python")
+        message(STATUS "sageDB: Editable install, lib -> ${_lib_install_dest}")
+    else()
+        # Wheel build: install to wheel platlib (same directory as Python extension)
+        set(_lib_install_dest "${SKBUILD_PLATLIB_DIR}/sage/middleware/components/sage_db/python")
+        message(STATUS "sageDB: Wheel build, lib -> ${_lib_install_dest}")
+    endif()
+    
+    install(TARGETS sage_db
+        LIBRARY DESTINATION ${_lib_install_dest}
+        ARCHIVE DESTINATION ${_lib_install_dest}
+        RUNTIME DESTINATION ${_lib_install_dest}
+        COMPONENT python
+    )
+else()
+    # 独立 C++ 构建模式：标准安装路径
+    install(TARGETS sage_db
+        EXPORT sage_db_targets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 install(DIRECTORY include/ DESTINATION include)
 
+# ============================================================================
+# Python bindings (optional)
+# ============================================================================
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
 if(BUILD_PYTHON_BINDINGS)
-    install(TARGETS _sage_db DESTINATION .)
+    message(STATUS "Building Python bindings for sage_db")
+    add_subdirectory(python)
 endif()

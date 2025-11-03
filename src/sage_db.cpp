@@ -47,24 +47,24 @@ std::vector<VectorId> SageDB::add_batch(const std::vector<Vector>& vectors,
 }
 
 bool SageDB::remove(VectorId id) {
-    // Note: FAISS doesn't support removing vectors efficiently
-    // This is a limitation that could be addressed with a custom implementation
+    bool removed = vector_store_->remove_vector(id);
     metadata_store_->remove_metadata(id);
-    // TODO: Implement vector removal when FAISS supports it or use custom index
-    return true;
+    return removed;
 }
 
 bool SageDB::update(VectorId id, const Vector& vector, const Metadata& metadata) {
-    validate_dimension(vector);
-    
-    // For now, we can only update metadata
-    // Vector updates would require rebuilding the index
-    if (!metadata.empty()) {
-        metadata_store_->set_metadata(id, metadata);
-        return true;
+    bool updated = false;
+    if (!vector.empty()) {
+        validate_dimension(vector);
+        updated = vector_store_->update_vector(id, vector);
     }
     
-    return false;
+    if (!metadata.empty()) {
+        metadata_store_->set_metadata(id, metadata);
+        updated = true;
+    }
+    
+    return updated;
 }
 
 std::vector<QueryResult> SageDB::search(const Vector& query, 
