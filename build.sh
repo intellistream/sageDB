@@ -44,13 +44,30 @@ check_libstdcxx() {
 # Check libstdc++ before building
 check_libstdcxx
 
+# 确定构建目录：优先使用 .sage/build/sage_db（统一构建目录）
+# 如果在 middleware 上下文中构建，会由父 CMake 管理
+# 如果独立构建（开发/测试），则使用本地 build/
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 路径: sageDB -> sage_db -> components -> middleware -> sage -> src -> sage-middleware -> packages -> SAGE
+SAGE_ROOT="$(cd "${SCRIPT_DIR}/../../../../../../../.." && pwd)"
+
+if [[ -d "${SAGE_ROOT}/.sage" ]]; then
+    # 在 SAGE 项目根目录下，使用统一构建目录
+    BUILD_DIR="${SAGE_ROOT}/.sage/build/sage_db"
+    echo "使用统一构建目录: ${BUILD_DIR}"
+else
+    # 独立构建（子模块开发模式）
+    BUILD_DIR="${SCRIPT_DIR}/build"
+    echo "使用本地构建目录: ${BUILD_DIR}"
+fi
+
 # Create build directory if not exists
-mkdir -p build
+mkdir -p "${BUILD_DIR}"
 
 # Configure with CMake (same pattern as sage_flow)
 cmake_args=(
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
-    -DCMAKE_INSTALL_PREFIX="$(pwd)/install"
+    -DCMAKE_INSTALL_PREFIX="${BUILD_DIR}/install"
     -DBUILD_TESTS=ON
     -DBUILD_PYTHON_BINDINGS=ON
     -DUSE_OPENMP=ON
@@ -71,9 +88,9 @@ if [[ -n "${SAGE_GPERFTOOLS_ROOT:-}" ]]; then
 fi
 
 # Configure with CMake
-cmake -B build "${cmake_args[@]}"
+cmake -B "${BUILD_DIR}" -S "${SCRIPT_DIR}" "${cmake_args[@]}"
 
 # Build (same as sage_flow)
-cmake --build build -j "$(nproc)"
+cmake --build "${BUILD_DIR}" -j "$(nproc)"
 
 echo "SAGE DB build completed."
