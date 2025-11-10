@@ -45,7 +45,10 @@ jobs:
             make \
             gcc_linux-64 \
             gxx_linux-64 \
-            pkg-config
+            pkg-config \
+            pytorch \
+            cpuonly \
+            -c pytorch
 
       # Install additional C++ toolchain (Ubuntu)
       - name: Install C++ toolchain (Ubuntu)
@@ -76,6 +79,8 @@ jobs:
             -DBUILD_TESTS=ON \
             -DBUILD_PYTHON_BINDINGS=OFF \
             -DENABLE_MULTIMODAL=ON \
+            -DENABLE_LIBAMM=ON \
+            -DLIBAMM_USE_URL_DOWNLOAD=ON \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
             -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" \
             -DFAISS_ROOT="$CONDA_PREFIX"
@@ -84,6 +89,29 @@ jobs:
         shell: bash -el {0}
         run: |
           cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Verify LibAMM integration
+        shell: bash -el {0}
+        run: |
+          echo "Checking LibAMM download and build..."
+          if [ -d "build/_deps/libamm-src" ]; then
+            echo "✅ LibAMM source downloaded to build/_deps/libamm-src"
+            ls -la build/_deps/libamm-src/ | head -20
+          else
+            echo "❌ LibAMM source not found"
+            exit 1
+          fi
+          
+          if [ -d "build/_deps/libamm-build" ]; then
+            echo "✅ LibAMM build directory exists"
+            find build/_deps/libamm-build -name "*.a" -o -name "*.so" | head -10
+          else
+            echo "❌ LibAMM build directory not found"
+            exit 1
+          fi
+          
+          echo "Checking if sage_db links to LibAMM..."
+          ldd build/libsage_db.so | grep -i "amm\|torch" || echo "Note: LibAMM might be statically linked"
 
       - name: Set library path for tests
         shell: bash -el {0}
@@ -95,6 +123,18 @@ jobs:
         run: |
           cd build
           LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ctest --output-on-failure --verbose
+
+      - name: Run LibAMM integration test separately
+        shell: bash -el {0}
+        run: |
+          cd build
+          if [ -f ./test_libamm_integration ]; then
+            echo "Running LibAMM integration tests..."
+            LD_LIBRARY_PATH=$PWD:$CONDA_PREFIX/lib ./test_libamm_integration
+            echo "✅ LibAMM integration tests completed"
+          else
+            echo "⚠️ LibAMM integration test not found (might be disabled)"
+          fi
 
       - name: Run direct test executables (fallback)
         if: failure()

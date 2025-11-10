@@ -338,6 +338,16 @@ if(BUILD_TESTS)
         
         add_test(NAME test_multimodal COMMAND test_multimodal)
     endif()
+    
+    # LibAMM integration tests
+    if(ENABLE_LIBAMM)
+        add_executable(test_libamm_integration tests/test_libamm_integration.cpp)
+        target_link_libraries(test_libamm_integration PRIVATE sage_db)
+        target_include_directories(test_libamm_integration PRIVATE include)
+        
+        add_test(NAME test_libamm_integration COMMAND test_libamm_integration)
+        message(STATUS "LibAMM integration tests enabled")
+    endif()
 endif()
 
 # Install rules - 条件化安装以支持 SKBUILD 和独立构建
