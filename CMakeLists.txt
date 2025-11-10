@@ -10,6 +10,9 @@ option(USE_OPENMP "Enable OpenMP support" ON)
 option(ENABLE_MULTIMODAL "Enable multimodal fusion support" ON)
 option(ENABLE_OPENCV "Enable OpenCV for image processing" OFF)
 option(ENABLE_FFMPEG "Enable FFmpeg for audio/video processing" OFF)
+option(ENABLE_SONG "Enable SONG GPU ANN backend" OFF)
+option(ENABLE_FLATGPU_CUDA "Enable CUDA acceleration for FlatGPU index" OFF)
+option(ENABLE_LIBAMM "Enable LibAMM accelerated sketch backends" ON)
 
 set(_sage_db_enable_gperftools_default OFF)
 if(DEFINED SAGE_ENABLE_GPERFTOOLS)
@@ -84,6 +87,26 @@ set(SAGE_DB_HEADERS
     include/sage_db/anns/brute_force_plugin.h
 )
 
+if(ENABLE_SONG)
+    message(STATUS "SONG ANN backend enabled")
+    list(APPEND SAGE_DB_SOURCES src/anns/song_plugin.cpp)
+    list(APPEND SAGE_DB_HEADERS include/sage_db/anns/song_plugin.h)
+endif()
+
+list(APPEND SAGE_DB_SOURCES src/anns/vamana_plugin.cpp)
+list(APPEND SAGE_DB_HEADERS include/sage_db/anns/vamana_plugin.h)
+
+list(APPEND SAGE_DB_SOURCES src/anns/flat_gpu_plugin.cpp)
+list(APPEND SAGE_DB_HEADERS include/sage_db/anns/flat_gpu_plugin.h)
+list(APPEND SAGE_DB_HEADERS include/sage_db/anns/flat_gpu/cuda_helpers.h)
+
+if(ENABLE_FLATGPU_CUDA)
+    enable_language(CUDA)
+    list(APPEND SAGE_DB_SOURCES src/anns/flat_gpu/cuda_helpers.cu)
+else()
+    list(APPEND SAGE_DB_SOURCES src/anns/flat_gpu/cuda_helpers_stub.cpp)
+endif()
+
 if(FAISS_FOUND)
     list(APPEND SAGE_DB_SOURCES src/anns/faiss_plugin.cpp)
     list(APPEND SAGE_DB_HEADERS include/sage_db/anns/faiss_plugin.h)
@@ -106,6 +129,14 @@ endif()
 
 # Create shared library
 add_library(sage_db SHARED ${SAGE_DB_SOURCES})
+
+if(ENABLE_SONG)
+    target_compile_definitions(sage_db PRIVATE ENABLE_SONG)
+endif()
+
+if(ENABLE_FLATGPU_CUDA)
+    target_compile_definitions(sage_db PRIVATE ENABLE_FLATGPU_CUDA)
+endif()
 
 # Include directories
 target_include_directories(sage_db PUBLIC
@@ -149,6 +180,137 @@ endif()
 # OpenMP linking
 if(OpenMP_CXX_FOUND)
     target_link_libraries(sage_db PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
+# LibAMM accelerated sketch support
+if(ENABLE_LIBAMM)
+    # Attempt to locate Torch (required by LibAMM)
+    if(NOT Torch_FOUND)
+        find_package(Torch QUIET)
+    endif()
+
+    if(NOT Torch_FOUND)
+        find_package(Python3 COMPONENTS Interpreter QUIET)
+        if(Python3_Interpreter_FOUND)
+            execute_process(
+                COMMAND ${Python3_EXECUTABLE} -c "import importlib, sys; torch = importlib.import_module('torch'); sys.stdout.write(getattr(torch.utils, 'cmake_prefix_path', ''))"
+                OUTPUT_VARIABLE _Torch_CMake_Prefix
+                RESULT_VARIABLE _Torch_CMake_Result
+                ERROR_QUIET
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+            if(_Torch_CMake_Result EQUAL 0 AND NOT _Torch_CMake_Prefix STREQUAL "")
+                list(APPEND CMAKE_PREFIX_PATH "${_Torch_CMake_Prefix}")
+                find_package(Torch QUIET)
+            endif()
+        endif()
+    endif()
+
+    if(NOT Torch_FOUND)
+        message(WARNING "Torch was not found; disabling LibAMM support. Set Torch_DIR or install torch to enable LibAMM.")
+        set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+    endif()
+endif()
+
+if(ENABLE_LIBAMM)
+    message(STATUS "LibAMM support enabled")
+
+    # Check for local LibAMM installation first (using project-level external/ directory)
+    set(LIBAMM_LOCAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../../../../external/LibAMM" CACHE PATH "Path to local LibAMM installation")
+    
+    if(EXISTS "${LIBAMM_LOCAL_PATH}/CMakeLists.txt")
+        message(STATUS "Using local LibAMM from: ${LIBAMM_LOCAL_PATH}")
+        set(libamm_SOURCE_DIR "${LIBAMM_LOCAL_PATH}")
+        set(libamm_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-build")
+        
+        set(_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+        set(_saved_cxx_flags_debug "${CMAKE_CXX_FLAGS_DEBUG}")
+        set(_saved_cxx_flags_release "${CMAKE_CXX_FLAGS_RELEASE}")
+
+        # Disable optional LibAMM extras we do not need when embedding as a subproject
+        set(ENABLE_UNIT_TESTS OFF CACHE BOOL "Disable LibAMM unit tests" FORCE)
+        set(ENABLE_PYBIND OFF CACHE BOOL "Disable LibAMM standalone pybind module" FORCE)
+        set(ENABLE_PAPI OFF CACHE BOOL "Disable LibAMM PAPI instrumentation" FORCE)
+        set(ENABLE_OPENCL OFF CACHE BOOL "Disable LibAMM OpenCL backend" FORCE)
+        set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
+        set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
+        
+        add_subdirectory(${libamm_SOURCE_DIR} ${libamm_BINARY_DIR} EXCLUDE_FROM_ALL)
+        
+        set(CMAKE_CXX_FLAGS "${_saved_cxx_flags}")
+        set(CMAKE_CXX_FLAGS_DEBUG "${_saved_cxx_flags_debug}")
+        set(CMAKE_CXX_FLAGS_RELEASE "${_saved_cxx_flags_release}")
+    else()
+        message(STATUS "Local LibAMM not found at ${LIBAMM_LOCAL_PATH}")
+        message(STATUS "Attempting to download LibAMM via FetchContent...")
+        message(STATUS "Note: For faster builds, you can manually download LibAMM to ${LIBAMM_LOCAL_PATH}")
+        
+        include(FetchContent)
+        
+        # Use URL download as fallback if git clone fails (more reliable for users)
+        set(LIBAMM_USE_URL_DOWNLOAD OFF CACHE BOOL "Download LibAMM as tarball instead of git clone")
+        
+        if(LIBAMM_USE_URL_DOWNLOAD)
+            FetchContent_Declare(
+                libamm
+                URL https://github.com/intellistream/LibAMM/archive/refs/heads/main.tar.gz
+                DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+            )
+        else()
+            FetchContent_Declare(
+                libamm
+                GIT_REPOSITORY https://github.com/intellistream/LibAMM.git
+                GIT_TAG main
+                GIT_PROGRESS TRUE
+            )
+        endif()
+
+        set(_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+        set(_saved_cxx_flags_debug "${CMAKE_CXX_FLAGS_DEBUG}")
+        set(_saved_cxx_flags_release "${CMAKE_CXX_FLAGS_RELEASE}")
+
+        # Disable optional LibAMM extras we do not need when embedding as a subproject
+        set(ENABLE_UNIT_TESTS OFF CACHE BOOL "Disable LibAMM unit tests" FORCE)
+        set(ENABLE_PYBIND OFF CACHE BOOL "Disable LibAMM standalone pybind module" FORCE)
+        set(ENABLE_PAPI OFF CACHE BOOL "Disable LibAMM PAPI instrumentation" FORCE)
+        set(ENABLE_OPENCL OFF CACHE BOOL "Disable LibAMM OpenCL backend" FORCE)
+        set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
+        set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
+
+        FetchContent_MakeAvailable(libamm)
+
+        # Restore original compiler flags to prevent LibAMM from overriding the parent project
+        set(CMAKE_CXX_FLAGS "${_saved_cxx_flags}")
+        set(CMAKE_CXX_FLAGS_DEBUG "${_saved_cxx_flags_debug}")
+        set(CMAKE_CXX_FLAGS_RELEASE "${_saved_cxx_flags_release}")
+        
+        # Note: FetchContent_MakeAvailable automatically sets libamm_SOURCE_DIR and libamm_BINARY_DIR
+        # Downloaded to: ${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-src/
+        # Built in: ${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-build/
+    endif()
+
+    target_link_libraries(sage_db PRIVATE LibAMM)
+
+    if(Torch_FOUND)
+        if(TORCH_INCLUDE_DIRS)
+            target_include_directories(sage_db PRIVATE ${TORCH_INCLUDE_DIRS})
+        endif()
+        if(TORCH_LIBRARIES)
+            target_link_libraries(sage_db PRIVATE ${TORCH_LIBRARIES})
+        endif()
+        if(TORCH_CXX_FLAGS)
+            separate_arguments(_TORCH_CXX_FLAGS_LIST NATIVE_COMMAND ${TORCH_CXX_FLAGS})
+            if(_TORCH_CXX_FLAGS_LIST)
+                target_compile_options(sage_db PRIVATE ${_TORCH_CXX_FLAGS_LIST})
+            endif()
+        endif()
+    endif()
+
+    # Use libamm_SOURCE_DIR (set by either local path or FetchContent)
+    target_include_directories(sage_db PRIVATE
+        ${libamm_SOURCE_DIR}/include
+    )
+    target_compile_definitions(sage_db PRIVATE ENABLE_LIBAMM)
 endif()
 
 # Compiler specific options
