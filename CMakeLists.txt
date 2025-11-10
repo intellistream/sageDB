@@ -233,6 +233,9 @@ if(ENABLE_LIBAMM)
         set(ENABLE_PAPI OFF CACHE BOOL "Disable LibAMM PAPI instrumentation" FORCE)
         set(ENABLE_OPENCL OFF CACHE BOOL "Disable LibAMM OpenCL backend" FORCE)
         set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
+        
+        # Set as regular variable first (LibAMM checks non-cached variable)
+        set(LibAMM_SKIP_BENCHMARK_COPY ON)
         set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
         
         add_subdirectory(${libamm_SOURCE_DIR} ${libamm_BINARY_DIR} EXCLUDE_FROM_ALL)
@@ -270,11 +273,15 @@ if(ENABLE_LIBAMM)
         set(_saved_cxx_flags_release "${CMAKE_CXX_FLAGS_RELEASE}")
 
         # Disable optional LibAMM extras we do not need when embedding as a subproject
+        # These must be set BEFORE FetchContent_MakeAvailable to take effect
         set(ENABLE_UNIT_TESTS OFF CACHE BOOL "Disable LibAMM unit tests" FORCE)
         set(ENABLE_PYBIND OFF CACHE BOOL "Disable LibAMM standalone pybind module" FORCE)
         set(ENABLE_PAPI OFF CACHE BOOL "Disable LibAMM PAPI instrumentation" FORCE)
         set(ENABLE_OPENCL OFF CACHE BOOL "Disable LibAMM OpenCL backend" FORCE)
         set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
+        
+        # Set as regular variable first (LibAMM checks non-cached variable)
+        set(LibAMM_SKIP_BENCHMARK_COPY ON)
         set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
 
         FetchContent_MakeAvailable(libamm)
