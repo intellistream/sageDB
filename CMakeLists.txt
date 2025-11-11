@@ -185,30 +185,77 @@ endif()
 # LibAMM accelerated sketch support
 if(ENABLE_LIBAMM)
     # Attempt to locate Torch (required by LibAMM)
-    if(NOT Torch_FOUND)
-        find_package(Torch QUIET)
-    endif()
-
-    if(NOT Torch_FOUND)
-        find_package(Python3 COMPONENTS Interpreter QUIET)
-        if(Python3_Interpreter_FOUND)
-            execute_process(
-                COMMAND ${Python3_EXECUTABLE} -c "import importlib, sys; torch = importlib.import_module('torch'); sys.stdout.write(getattr(torch.utils, 'cmake_prefix_path', ''))"
-                OUTPUT_VARIABLE _Torch_CMake_Prefix
-                RESULT_VARIABLE _Torch_CMake_Result
-                ERROR_QUIET
-                OUTPUT_STRIP_TRAILING_WHITESPACE
-            )
-            if(_Torch_CMake_Result EQUAL 0 AND NOT _Torch_CMake_Prefix STREQUAL "")
-                list(APPEND CMAKE_PREFIX_PATH "${_Torch_CMake_Prefix}")
-                find_package(Torch QUIET)
+    # PyTorch's CMake config fails with FATAL_ERROR if it's CUDA-enabled but CUDA is not found
+    # We check this condition before calling find_package to avoid the error
+    
+    set(_torch_usable FALSE)
+    
+    # First, check if PyTorch is available via Python and if it requires CUDA
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        # Check if torch is available and if it's CUDA-enabled
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c "import sys; import torch; sys.stdout.write('1' if torch.cuda.is_available() else '0'); sys.stdout.write('|'); sys.stdout.write(torch.version.cuda if hasattr(torch.version, 'cuda') and torch.version.cuda else 'none')"
+            OUTPUT_VARIABLE _Torch_CUDA_Info
+            RESULT_VARIABLE _Torch_Check_Result
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(_Torch_Check_Result EQUAL 0)
+            string(REPLACE "|" ";" _Torch_CUDA_List "${_Torch_CUDA_Info}")
+            list(GET _Torch_CUDA_List 0 _Torch_Has_CUDA_Runtime)
+            list(GET _Torch_CUDA_List 1 _Torch_CUDA_Version)
+            
+            # If PyTorch is CUDA-enabled but CUDA runtime is not available, skip Torch finding
+            if(NOT _Torch_CUDA_Version STREQUAL "none" AND _Torch_Has_CUDA_Runtime STREQUAL "0")
+                message(WARNING "PyTorch is CUDA-enabled (version ${_Torch_CUDA_Version}) but CUDA runtime is not available")
+                message(WARNING "Disabling LibAMM to avoid CMake configuration errors")
+                message(WARNING "To enable LibAMM:")
+                message(WARNING "  - Install CUDA toolkit matching PyTorch CUDA version ${_Torch_CUDA_Version}")
+                message(WARNING "  - Or install CPU-only PyTorch: pip install torch --index-url https://download.pytorch.org/whl/cpu")
+                set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+                set(_torch_usable FALSE)
+            else()
+                # PyTorch is CPU-only or CUDA is available
+                set(_torch_usable TRUE)
             endif()
+        else()
+            message(WARNING "PyTorch not found in Python environment")
+            set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+            set(_torch_usable FALSE)
         endif()
+    else()
+        message(WARNING "Python interpreter not found, cannot check PyTorch availability")
+        set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+        set(_torch_usable FALSE)
     endif()
 
-    if(NOT Torch_FOUND)
-        message(WARNING "Torch was not found; disabling LibAMM support. Set Torch_DIR or install torch to enable LibAMM.")
-        set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+    # Only attempt to find Torch via CMake if we've verified it's usable
+    if(_torch_usable AND NOT Torch_FOUND)
+        # Get Torch CMake prefix path from Python
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} -c "import torch; print(torch.utils.cmake_prefix_path)"
+            OUTPUT_VARIABLE _Torch_CMake_Prefix
+            RESULT_VARIABLE _Torch_CMake_Result
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(_Torch_CMake_Result EQUAL 0 AND NOT _Torch_CMake_Prefix STREQUAL "")
+            list(APPEND CMAKE_PREFIX_PATH "${_Torch_CMake_Prefix}")
+            find_package(Torch QUIET)
+            
+            if(Torch_FOUND)
+                message(STATUS "PyTorch found and loaded successfully for LibAMM support")
+            else()
+                message(WARNING "PyTorch CMake config not found despite Python detection")
+                set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+            endif()
+        else()
+            message(WARNING "Could not determine PyTorch CMake prefix path")
+            set(ENABLE_LIBAMM OFF CACHE BOOL "Enable LibAMM accelerated sketch backends" FORCE)
+        endif()
     endif()
 endif()
 
