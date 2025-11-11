@@ -3,12 +3,14 @@
 #include <numeric>
 #include <cmath>
 #include <cctype>
+#include <cstring>
 #include <stdexcept>
 #include <unordered_map>
 #include <random>
 #include <chrono>
 #include <sstream>
 #include <fstream>
+#include <filesystem>
 
 #ifdef OPENCV_ENABLED
 #include <opencv2/imgproc.hpp>
@@ -68,6 +70,55 @@ inline bool has_extension_magic(const std::vector<uint8_t>& data, const std::vec
     }
     // If unknown, fall back to extension list presence (cannot check without filename) -> best-effort
     return !exts.empty();
+}
+
+// Safe reading functions for binary data with endianness conversion
+// WAV format uses little-endian byte order
+inline uint16_t read_le_uint16(const uint8_t* ptr) {
+    uint16_t value;
+    std::memcpy(&value, ptr, sizeof(uint16_t));
+    // Convert from little-endian to host byte order
+    #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return __builtin_bswap16(value);
+    #else
+    return value;
+    #endif
+}
+
+inline uint32_t read_le_uint32(const uint8_t* ptr) {
+    uint32_t value;
+    std::memcpy(&value, ptr, sizeof(uint32_t));
+    // Convert from little-endian to host byte order
+    #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return __builtin_bswap32(value);
+    #else
+    return value;
+    #endif
+}
+
+inline int16_t read_le_int16(const uint8_t* ptr) {
+    int16_t value;
+    std::memcpy(&value, ptr, sizeof(int16_t));
+    // Convert from little-endian to host byte order
+    #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    uint16_t uval = static_cast<uint16_t>(value);
+    uval = __builtin_bswap16(uval);
+    return static_cast<int16_t>(uval);
+    #else
+    return value;
+    #endif
+}
+
+inline float read_le_float32(const uint8_t* ptr) {
+    uint32_t int_value;
+    std::memcpy(&int_value, ptr, sizeof(uint32_t));
+    // Convert from little-endian to host byte order
+    #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    int_value = __builtin_bswap32(int_value);
+    #endif
+    float float_value;
+    std::memcpy(&float_value, &int_value, sizeof(float));
+    return float_value;
 }
 
 } // namespace
@@ -262,16 +313,16 @@ std::vector<float> AudioModalityProcessor::bytes_to_audio(const std::vector<uint
     size_t data_offset = 0; uint32_t data_size = 0;
 
     while (pos + 8 <= data.size()) {
-        uint32_t chunk_id = *reinterpret_cast<const uint32_t*>(ptr + pos);
-        uint32_t chunk_size = *reinterpret_cast<const uint32_t*>(ptr + pos + 4);
+        uint32_t chunk_id = read_le_uint32(ptr + pos);
+        uint32_t chunk_size = read_le_uint32(ptr + pos + 4);
         pos += 8;
         if (pos + chunk_size > data.size()) break;
         if (chunk_id == 0x20746d66) { // 'fmt '
             if (chunk_size < 16) throw std::runtime_error("Invalid fmt chunk");
-            audio_format = *reinterpret_cast<const uint16_t*>(ptr + pos + 0);
-            num_channels = *reinterpret_cast<const uint16_t*>(ptr + pos + 2);
-            sample_rate = *reinterpret_cast<const uint32_t*>(ptr + pos + 4);
-            bits_per_sample = *reinterpret_cast<const uint16_t*>(ptr + pos + 14);
+            audio_format = read_le_uint16(ptr + pos + 0);
+            num_channels = read_le_uint16(ptr + pos + 2);
+            sample_rate = read_le_uint32(ptr + pos + 4);
+            bits_per_sample = read_le_uint16(ptr + pos + 14);
         } else if (chunk_id == 0x61746164) { // 'data'
             data_offset = pos;
             data_size = chunk_size;
@@ -287,11 +338,13 @@ std::vector<float> AudioModalityProcessor::bytes_to_audio(const std::vector<uint
     std::vector<float> out;
     out.reserve(samples);
 
-    const int16_t* pcm = reinterpret_cast<const int16_t*>(ptr + data_offset);
     for (size_t i = 0; i < samples; ++i) {
         int64_t acc = 0;
         for (uint16_t ch = 0; ch < num_channels; ++ch) {
-            acc += pcm[i * num_channels + ch];
+            size_t sample_offset = data_offset + (i * num_channels + ch) * sizeof(int16_t);
+            if (sample_offset + sizeof(int16_t) > data.size()) break;
+            int16_t sample = read_le_int16(ptr + sample_offset);
+            acc += sample;
         }
         float v = static_cast<float>(acc) / (32768.0f * num_channels);
         out.push_back(v);
@@ -400,7 +453,7 @@ bool AudioModalityProcessor::is_valid_audio_format(const std::vector<uint8_t>& d
 
 // ===================== VideoModalityProcessor =====================
 
-VideoModalityProcessor::VideoModalityProcessor() : config_{} ,
+VideoModalityProcessor::VideoModalityProcessor() : config_{},
     image_processor_(std::make_shared<ImageModalityProcessor>(ImageModalityProcessor::ImageConfig{})),
     audio_processor_(std::make_shared<AudioModalityProcessor>(AudioModalityProcessor::AudioConfig{})) {}
 
@@ -477,22 +530,34 @@ Vector VideoModalityProcessor::process(const std::vector<uint8_t>& raw_data) {
 #ifdef OPENCV_ENABLED
 std::vector<cv::Mat> VideoModalityProcessor::extract_frames(const std::vector<uint8_t>& video_data) const {
     // Write to temp file then decode with VideoCapture (simplest cross-platform approach)
-    std::string tmp_path = std::string("/tmp/sagedb_vid_") + std::to_string(reinterpret_cast<uintptr_t>(video_data.data())) + ".mp4";
+    // Use secure temp directory and random filename to avoid race conditions
+    std::filesystem::path tmp_dir = std::filesystem::temp_directory_path();
+    
+    // Generate unique filename using random number generator
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis;
+    std::string tmp_filename = "sagedb_vid_" + std::to_string(dis(gen)) + ".mp4";
+    std::filesystem::path tmp_path = tmp_dir / tmp_filename;
+    
     {
         std::ofstream ofs(tmp_path, std::ios::binary);
+        if (!ofs) {
+            throw std::runtime_error("Failed to create temporary video file");
+        }
         ofs.write(reinterpret_cast<const char*>(video_data.data()), static_cast<std::streamsize>(video_data.size()));
     }
 
-    cv::VideoCapture cap(tmp_path);
+    cv::VideoCapture cap(tmp_path.string());
     if (!cap.isOpened()) {
         // Try without writing extension
-        cap.open(tmp_path, cv::CAP_FFMPEG);
+        cap.open(tmp_path.string(), cv::CAP_FFMPEG);
     }
 
     std::vector<cv::Mat> frames;
     if (!cap.isOpened()) {
         // Cleanup and return empty
-        std::remove(tmp_path.c_str());
+        std::filesystem::remove(tmp_path);
         return frames;
     }
 
@@ -514,7 +579,7 @@ std::vector<cv::Mat> VideoModalityProcessor::extract_frames(const std::vector<ui
     }
 
     cap.release();
-    std::remove(tmp_path.c_str());
+    std::filesystem::remove(tmp_path);
     return frames;
 }
 
@@ -738,11 +803,14 @@ std::vector<float> TimeSeriesModalityProcessor::bytes_to_series(const std::vecto
         }
         if (!series.empty()) return series;
     }
-    // Otherwise interpret as binary float32 little-endian
+    // Otherwise interpret as binary float32 in little-endian byte order
+    // Read each float using safe endianness conversion
     size_t cnt = data.size() / sizeof(float);
-    series.resize(cnt);
-    std::memcpy(series.data(), data.data(), cnt * sizeof(float));
-    if (series.size() > config_.max_sequence_length) series.resize(config_.max_sequence_length);
+    series.reserve(cnt);
+    const uint8_t* ptr = data.data();
+    for (size_t i = 0; i < cnt && series.size() < config_.max_sequence_length; ++i) {
+        series.push_back(read_le_float32(ptr + i * sizeof(float)));
+    }
     return series;
 }
 

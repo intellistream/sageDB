@@ -2,7 +2,7 @@
 
 #include "multimodal_fusion.h"
 #ifdef OPENCV_ENABLED
-#include <opencv2/opencv.hpp>  // 需要OpenCV库
+#include <opencv2/opencv.hpp>  // Requires OpenCV library
 #endif
 #include <string>
 #include <regex>
