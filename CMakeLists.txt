@@ -284,7 +284,31 @@ if(ENABLE_LIBAMM)
         set(LibAMM_SKIP_BENCHMARK_COPY ON)
         set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
 
-        FetchContent_MakeAvailable(libamm)
+        # Download LibAMM but don't add it yet (we need to patch it first)
+        FetchContent_GetProperties(libamm)
+        if(NOT libamm_POPULATED)
+            FetchContent_Populate(libamm)
+            
+            # Set the binary directory for LibAMM
+            set(libamm_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-build")
+            
+            # Patch LibAMM's CMakeLists.txt to skip benchmark dataset copy
+            # This is needed because LibAMM doesn't yet support LibAMM_SKIP_BENCHMARK_COPY
+            file(READ "${libamm_SOURCE_DIR}/CMakeLists.txt" _libamm_cmake_content)
+            
+            # Comment out the problematic file COPY command for benchmark datasets
+            # Match the pattern more robustly using regex
+            string(REGEX REPLACE 
+                "file\\(COPY [^)]*benchmark/datasets[^)]*\\)"
+                "# file(COPY benchmark/datasets) - DISABLED by sageDB patch"
+                _libamm_cmake_content "${_libamm_cmake_content}")
+            
+            file(WRITE "${libamm_SOURCE_DIR}/CMakeLists.txt" "${_libamm_cmake_content}")
+            message(STATUS "✅ Patched LibAMM CMakeLists.txt to skip benchmark dataset copy")
+            
+            # Now add the subdirectory
+            add_subdirectory(${libamm_SOURCE_DIR} ${libamm_BINARY_DIR} EXCLUDE_FROM_ALL)
+        endif()
 
         # Restore original compiler flags to prevent LibAMM from overriding the parent project
         set(CMAKE_CXX_FLAGS "${_saved_cxx_flags}")
