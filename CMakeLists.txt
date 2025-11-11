@@ -296,11 +296,21 @@ if(ENABLE_LIBAMM)
             # This is needed because LibAMM doesn't yet support LibAMM_SKIP_BENCHMARK_COPY
             file(READ "${libamm_SOURCE_DIR}/CMakeLists.txt" _libamm_cmake_content)
             
-            # Comment out the problematic file COPY command for benchmark datasets
-            # Match the pattern more robustly using regex
-            string(REGEX REPLACE 
-                "file\\(COPY [^)]*benchmark/datasets[^)]*\\)"
-                "# file(COPY benchmark/datasets) - DISABLED by sageDB patch"
+            # Comment out the problematic lines that copy benchmark datasets
+            # Use simple string replacement for each line
+            string(REPLACE 
+                "set(source_directory \"\${CMAKE_SOURCE_DIR}/benchmark/datasets/\")"
+                "# set(source_directory \"\${CMAKE_SOURCE_DIR}/benchmark/datasets/\") # DISABLED by sageDB"
+                _libamm_cmake_content "${_libamm_cmake_content}")
+            
+            string(REPLACE 
+                "set(destination_directory \"\${CMAKE_BINARY_DIR}/benchmark/datasets/\")"
+                "# set(destination_directory \"\${CMAKE_BINARY_DIR}/benchmark/datasets/\") # DISABLED by sageDB"
+                _libamm_cmake_content "${_libamm_cmake_content}")
+            
+            string(REPLACE 
+                "file(COPY \${source_directory} DESTINATION \${destination_directory})"
+                "# file(COPY \${source_directory} DESTINATION \${destination_directory}) # DISABLED by sageDB"
                 _libamm_cmake_content "${_libamm_cmake_content}")
             
             file(WRITE "${libamm_SOURCE_DIR}/CMakeLists.txt" "${_libamm_cmake_content}")
