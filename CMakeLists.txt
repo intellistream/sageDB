@@ -282,6 +282,10 @@ if(ENABLE_LIBAMM)
         set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
         
         # Skip LibAMM benchmark dataset copy (we don't need datasets for library usage)
+        # Note: LibAMM benchmark datasets are now centrally managed in sageData repository
+        # If you need to run LibAMM benchmarks, set:
+        #   -DLIBAMM_SKIP_DATASET_COPY=OFF
+        #   -DLIBAMM_DATASET_SOURCE_DIR="/path/to/sageData/libamm-benchmark/datasets"
         set(LIBAMM_SKIP_DATASET_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
 
         FetchContent_MakeAvailable(libamm)
