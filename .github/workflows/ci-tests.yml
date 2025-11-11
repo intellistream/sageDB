@@ -120,7 +120,7 @@ jobs:
           fi
           
           # Check if Torch was found
-          if grep -q "Torch_FOUND" build/CMakeCache.txt 2>/dev/null; then
+          if grep -q "Torch_DIR" build/CMakeCache.txt 2>/dev/null; then
             echo "✅ Torch was found by CMake"
           else
             echo "❌ Torch was NOT found - LibAMM requires Torch"
@@ -141,7 +141,7 @@ jobs:
           # Check LibAMM build
           if [ -d "build/_deps/libamm-build" ]; then
             echo "✅ LibAMM build directory exists"
-            find build/_deps/libamm-build -name "*.a" -o -name "*.so" 2>/dev/null | head -10
+            find build/_deps/libamm-build \( -name "*.a" -o -name "*.so" \) 2>/dev/null | head -10
           else
             echo "⚠️ LibAMM build directory not found"
           fi
