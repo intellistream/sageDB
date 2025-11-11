@@ -252,18 +252,19 @@ if(ENABLE_LIBAMM)
         
         # Use URL download as fallback if git clone fails (more reliable for users)
         set(LIBAMM_USE_URL_DOWNLOAD OFF CACHE BOOL "Download LibAMM as tarball instead of git clone")
+        set(LIBAMM_GIT_TAG "feat/configurable-dataset-path" CACHE STRING "LibAMM git branch/tag to use")
         
         if(LIBAMM_USE_URL_DOWNLOAD)
             FetchContent_Declare(
                 libamm
-                URL https://github.com/intellistream/LibAMM/archive/refs/heads/main.tar.gz
+                URL https://github.com/intellistream/LibAMM/archive/refs/heads/${LIBAMM_GIT_TAG}.tar.gz
                 DOWNLOAD_EXTRACT_TIMESTAMP TRUE
             )
         else()
             FetchContent_Declare(
                 libamm
                 GIT_REPOSITORY https://github.com/intellistream/LibAMM.git
-                GIT_TAG main
+                GIT_TAG ${LIBAMM_GIT_TAG}
                 GIT_PROGRESS TRUE
             )
         endif()
@@ -280,44 +281,10 @@ if(ENABLE_LIBAMM)
         set(ENABLE_OPENCL OFF CACHE BOOL "Disable LibAMM OpenCL backend" FORCE)
         set(BUILD_BENCHMARKS OFF CACHE BOOL "Disable LibAMM benchmarks" FORCE)
         
-        # Set as regular variable first (LibAMM checks non-cached variable)
-        set(LibAMM_SKIP_BENCHMARK_COPY ON)
-        set(LibAMM_SKIP_BENCHMARK_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
+        # Skip LibAMM benchmark dataset copy (we don't need datasets for library usage)
+        set(LIBAMM_SKIP_DATASET_COPY ON CACHE BOOL "Skip LibAMM benchmark dataset copy" FORCE)
 
-        # Download LibAMM but don't add it yet (we need to patch it first)
-        FetchContent_GetProperties(libamm)
-        if(NOT libamm_POPULATED)
-            FetchContent_Populate(libamm)
-            
-            # Set the binary directory for LibAMM
-            set(libamm_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-build")
-            
-            # Patch LibAMM's CMakeLists.txt to remove benchmark dataset copy
-            # We don't need LibAMM's benchmark datasets, so remove these lines entirely
-            file(READ "${libamm_SOURCE_DIR}/CMakeLists.txt" _libamm_cmake_content)
-            
-            # Remove the lines that copy benchmark datasets (we don't need them)
-            string(REPLACE 
-                "set(source_directory \"\${CMAKE_SOURCE_DIR}/benchmark/datasets/\")"
-                ""
-                _libamm_cmake_content "${_libamm_cmake_content}")
-            
-            string(REPLACE 
-                "set(destination_directory \"\${CMAKE_BINARY_DIR}/benchmark/datasets/\")"
-                ""
-                _libamm_cmake_content "${_libamm_cmake_content}")
-            
-            string(REPLACE 
-                "file(COPY \${source_directory} DESTINATION \${destination_directory})"
-                ""
-                _libamm_cmake_content "${_libamm_cmake_content}")
-            
-            file(WRITE "${libamm_SOURCE_DIR}/CMakeLists.txt" "${_libamm_cmake_content}")
-            message(STATUS "✅ Removed benchmark dataset copy from LibAMM CMakeLists.txt")
-            
-            # Now add the subdirectory
-            add_subdirectory(${libamm_SOURCE_DIR} ${libamm_BINARY_DIR} EXCLUDE_FROM_ALL)
-        endif()
+        FetchContent_MakeAvailable(libamm)
 
         # Restore original compiler flags to prevent LibAMM from overriding the parent project
         set(CMAKE_CXX_FLAGS "${_saved_cxx_flags}")
