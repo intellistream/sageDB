@@ -292,29 +292,28 @@ if(ENABLE_LIBAMM)
             # Set the binary directory for LibAMM
             set(libamm_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/libamm-build")
             
-            # Patch LibAMM's CMakeLists.txt to skip benchmark dataset copy
-            # This is needed because LibAMM doesn't yet support LibAMM_SKIP_BENCHMARK_COPY
+            # Patch LibAMM's CMakeLists.txt to remove benchmark dataset copy
+            # We don't need LibAMM's benchmark datasets, so remove these lines entirely
             file(READ "${libamm_SOURCE_DIR}/CMakeLists.txt" _libamm_cmake_content)
             
-            # Comment out the problematic lines that copy benchmark datasets
-            # Use simple string replacement for each line
+            # Remove the lines that copy benchmark datasets (we don't need them)
             string(REPLACE 
                 "set(source_directory \"\${CMAKE_SOURCE_DIR}/benchmark/datasets/\")"
-                "# set(source_directory \"\${CMAKE_SOURCE_DIR}/benchmark/datasets/\") # DISABLED by sageDB"
+                ""
                 _libamm_cmake_content "${_libamm_cmake_content}")
             
             string(REPLACE 
                 "set(destination_directory \"\${CMAKE_BINARY_DIR}/benchmark/datasets/\")"
-                "# set(destination_directory \"\${CMAKE_BINARY_DIR}/benchmark/datasets/\") # DISABLED by sageDB"
+                ""
                 _libamm_cmake_content "${_libamm_cmake_content}")
             
             string(REPLACE 
                 "file(COPY \${source_directory} DESTINATION \${destination_directory})"
-                "# file(COPY \${source_directory} DESTINATION \${destination_directory}) # DISABLED by sageDB"
+                ""
                 _libamm_cmake_content "${_libamm_cmake_content}")
             
             file(WRITE "${libamm_SOURCE_DIR}/CMakeLists.txt" "${_libamm_cmake_content}")
-            message(STATUS "✅ Patched LibAMM CMakeLists.txt to skip benchmark dataset copy")
+            message(STATUS "✅ Removed benchmark dataset copy from LibAMM CMakeLists.txt")
             
             # Now add the subdirectory
             add_subdirectory(${libamm_SOURCE_DIR} ${libamm_BINARY_DIR} EXCLUDE_FROM_ALL)
