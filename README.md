@@ -4,6 +4,8 @@
 
 SageDB is a C++20 library that provides efficient vector similarity search, metadata management, and a flexible plugin system for Approximate Nearest Neighbor Search (ANNS) algorithms. It serves as the native core for the SAGE DB middleware component.
 
+> Usage Mode Guide: Please refer to `docs/USAGE_MODES.md` (for the positioning, data flow, and examples of Standalone / BYO-Embedding / Plugin / Service).
+
 ## 🎯 Features
 
 ### Core Capabilities
