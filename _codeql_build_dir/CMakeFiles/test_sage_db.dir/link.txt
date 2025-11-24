@@ -1,1 +1,0 @@
-/home/runner/work/sageDB/.codeql-scratch/dbs/cpp/working/autobuild/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/test_sage_db.dir/link.d CMakeFiles/test_sage_db.dir/tests/test_sage_db.cpp.o -o test_sage_db  -Wl,-rpath,/home/runner/work/sageDB/sageDB/_codeql_build_dir libsage_db.so /usr/lib/gcc/x86_64-linux-gnu/13/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a
