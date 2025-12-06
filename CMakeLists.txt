@@ -423,9 +423,14 @@ if(DEFINED SKBUILD)
     endif()
     
     if(_is_editable)
-        # Editable install: install to source tree directly
-        set(_lib_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/python")
-        message(STATUS "sageDB: Editable install, lib -> ${_lib_install_dest}")
+        # Editable install: use parent-defined install dir if available, else fallback
+        if(DEFINED SAGE_DB_INSTALL_DIR)
+            set(_lib_install_dest "${SAGE_DB_INSTALL_DIR}")
+            message(STATUS "sageDB: Using parent-defined install dir: ${_lib_install_dest}")
+        else()
+            set(_lib_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/python")
+            message(STATUS "sageDB: Using default editable install dir: ${_lib_install_dest}")
+        endif()
     else()
         # Wheel build: install to wheel platlib (same directory as Python extension)
         set(_lib_install_dest "${SKBUILD_PLATLIB_DIR}/sage/middleware/components/sage_db/python")

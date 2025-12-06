@@ -48,8 +48,14 @@ set_target_properties(_sage_db PROPERTIES
 # SOTA: Conditional install based on build context
 if(DEFINED SKBUILD)
     if(SKBUILD_STATE STREQUAL "editable")
-        # Editable install: install to source tree directly
-        set(_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/../../python")
+        # Editable install: use parent-defined install dir if available, else fallback
+        if(DEFINED SAGE_DB_INSTALL_DIR)
+            set(_install_dest "${SAGE_DB_INSTALL_DIR}")
+            message(STATUS "sage_db: Using parent-defined install dir: ${_install_dest}")
+        else()
+            set(_install_dest "${CMAKE_CURRENT_SOURCE_DIR}/../../python")
+            message(STATUS "sage_db: Using default editable install dir: ${_install_dest}")
+        endif()
         # Also install C++ libraries to same location
         install(TARGETS sage_db
             LIBRARY DESTINATION ${_install_dest}
